@@ -152,6 +152,46 @@ class BaseModel(object):
                 batch_gen_programs.append(batch_info['z_generated_programs'])
                 for i, program in enumerate(batch_info['z_generated_programs']):
                     self.writer.add_text('generated/epoch_{}'.format(epoch), program, epoch * num_batches)
+        
+        # Log the averaged evaluation metrics at the end of evaluation
+        if mode == 'eval' and hasattr(self, 'eval_metrics') and self.eval_metrics:
+            import wandb
+            # For accessing global_train_step from the SupervisedModel
+            global_step = 0
+            if hasattr(self, 'global_train_step'):
+                global_step = self.global_train_step
+            
+            # Average all collected metrics
+            avg_metrics = {}
+            for key, values in self.eval_metrics.items():
+                if values:  # Only average if we have values
+                    avg_metrics[f'eval/{key}'] = sum(values) / len(values)
+                    
+            # Create nested dictionaries for z vs b metrics
+            z_vs_b_metrics = {}
+            for key in list(avg_metrics.keys()):
+                if 'z_vs_b/' in key:
+                    parts = key.split('/')
+                    if len(parts) >= 3:
+                        metric_name = parts[1]
+                        model_name = parts[2]
+                        
+                        if metric_name not in z_vs_b_metrics:
+                            z_vs_b_metrics[metric_name] = {}
+                            
+                        z_vs_b_metrics[metric_name][model_name] = avg_metrics[key]
+                        # Remove the original flattened key
+                        del avg_metrics[key]
+            
+            # Add nested metrics back
+            for metric_name, model_values in z_vs_b_metrics.items():
+                avg_metrics[f'eval/z_vs_b/{metric_name}'] = model_values
+                
+            # Log the averaged metrics
+            wandb.log(avg_metrics, step=global_step)
+            
+            # Clear the metrics for next evaluation
+            self.eval_metrics.clear()
 
         epoch_info['generated_programs'] = batch_gen_programs
         optinal_epoch_info['program_ids'] = batch_program_ids
