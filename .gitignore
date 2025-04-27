@@ -7,3 +7,4 @@ karel_dataset/
 **/wandb
 /py3129
 /venv
+*.gif
