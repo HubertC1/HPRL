@@ -152,6 +152,26 @@ class BaseModel(object):
                 batch_gen_programs.append(batch_info['z_generated_programs'])
                 for i, program in enumerate(batch_info['z_generated_programs']):
                     self.writer.add_text('generated/epoch_{}'.format(epoch), program, epoch * num_batches)
+        
+        # Log the averaged evaluation metrics at the end of evaluation
+        if mode == 'eval' and hasattr(self, 'eval_metrics') and self.eval_metrics:
+            import wandb
+            # For accessing global_train_step from the SupervisedModel
+            global_step = 0
+            if hasattr(self, 'global_train_step'):
+                global_step = self.global_train_step
+            
+            # Average all collected metrics
+            avg_metrics = {}
+            for key, values in self.eval_metrics.items():
+                if values:  # Only average if we have values
+                    avg_metrics[f'eval/{key}'] = sum(values) / len(values)
+            
+            # Log the averaged metrics (all as flat keys)
+            wandb.log(avg_metrics, step=global_step)
+            
+            # Clear the metrics for next evaluation
+            self.eval_metrics.clear()
 
         epoch_info['generated_programs'] = batch_gen_programs
         optinal_epoch_info['program_ids'] = batch_program_ids
