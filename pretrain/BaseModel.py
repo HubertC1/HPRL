@@ -166,28 +166,8 @@ class BaseModel(object):
             for key, values in self.eval_metrics.items():
                 if values:  # Only average if we have values
                     avg_metrics[f'eval/{key}'] = sum(values) / len(values)
-                    
-            # Create nested dictionaries for z vs b metrics
-            z_vs_b_metrics = {}
-            for key in list(avg_metrics.keys()):
-                if 'z_vs_b/' in key:
-                    parts = key.split('/')
-                    if len(parts) >= 3:
-                        metric_name = parts[1]
-                        model_name = parts[2]
-                        
-                        if metric_name not in z_vs_b_metrics:
-                            z_vs_b_metrics[metric_name] = {}
-                            
-                        z_vs_b_metrics[metric_name][model_name] = avg_metrics[key]
-                        # Remove the original flattened key
-                        del avg_metrics[key]
             
-            # Add nested metrics back
-            for metric_name, model_values in z_vs_b_metrics.items():
-                avg_metrics[f'eval/z_vs_b/{metric_name}'] = model_values
-                
-            # Log the averaged metrics
+            # Log the averaged metrics (all as flat keys)
             wandb.log(avg_metrics, step=global_step)
             
             # Clear the metrics for next evaluation
