@@ -23,7 +23,8 @@ import numpy as np
 MASTER_SEED = 12345                       # ≤ change once per experiment
 rng = np.random.RandomState(MASTER_SEED)
 
-task_name = "StairClimber"
+# task_name = "StairClimber"
+task_name = "Maze"
 
 env_args = {
     "env_height": 8,
@@ -77,7 +78,11 @@ if __name__ == "__main__":
     # Optional evaluation env (no randomness makes learning curves cleaner)
     
     def generate_eval_env(seed):
-        eval_env = KarelGymEnv(render_mode=None, seed=seed)
+        eval_env =  KarelGymEnv(
+                    task_cls=get_task_cls(task_name),
+                    env_args=env_args,
+                    seed=seed
+                )
         return eval_env
     # eval_callback = EvalCallback(
     #     eval_env,
@@ -87,13 +92,13 @@ if __name__ == "__main__":
     #     verbose=0,
     # )
     eval_callback = GifEvalCallback(
-        eval_env=generate_eval_env(eval_seed),
+        eval_env=generate_eval_env(rng.randint(0, 2**31 - 1)),
         eval_freq=10_000,
         n_eval_episodes=20,
         callback_on_new_best=StopTrainingOnRewardThreshold(
             reward_threshold=0.9, verbose=1
         ),
-        save_dir="prog_policies/drl_train/gifs",          # directory for .gif files
+        save_dir=f"prog_policies/drl_train/gifs/{task_name}",          # directory for .gif files
         verbose=0,
     )
 
