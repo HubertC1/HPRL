@@ -43,7 +43,6 @@ class KarelGymEnv(gym.Env):
         self.render_mode = render_mode
         self._max_steps = max_episode_steps
         self._step_cnt = 0
-        self.render()
 
     # ----------  Gymnasium API  ----------
     def reset(self, *, seed: int | None = None, options=None):
