@@ -2,6 +2,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 import sys
+import os
 
 
 from prog_policies.karel_tasks import StairClimberSparse,  StairClimber   # or StairClimber
@@ -43,6 +44,7 @@ class KarelGymEnv(gym.Env):
         self.render_mode = render_mode
         self._max_steps = max_episode_steps
         self._step_cnt = 0
+        # self.render()
 
     # ----------  Gymnasium API  ----------
     def reset(self, *, seed: int | None = None, options=None):
@@ -70,12 +72,14 @@ class KarelGymEnv(gym.Env):
         info = {"crashed": crashed}
         return obs, reward, done, truncated, info
 
-    def render(self):
+    def render(self, task_name):
         if self._step_cnt < 100:
             state_image = self.base_env.to_image()
             from PIL import Image
             img = Image.fromarray(state_image)
-            save_path = f"prog_policies/drl_train/gifs/{self.seed}.png"
+            save_dir = f"prog_policies/drl_train/gifs/{task_name}"
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.join(save_dir, f"{self.seed}.png")
             img.save(save_path)
 
     def close(self):
