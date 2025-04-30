@@ -1,8 +1,6 @@
-from ..karel_tasks import TASK_NAME_LIST as KAREL_TASK_NAME_LIST
-from ..minigrid_tasks import TASK_NAME_LIST as MINIGRID_TASK_NAME_LIST
-
-
 def get_env_name(task_name: str) -> str:
+    from ..karel_tasks import TASK_NAME_LIST as KAREL_TASK_NAME_LIST
+    from ..minigrid_tasks import TASK_NAME_LIST as MINIGRID_TASK_NAME_LIST
     """
     Get the environment name based on the task name.
 
