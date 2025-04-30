@@ -8,3 +8,5 @@ karel_dataset/
 /py3129
 /venv
 *.gif
+*.zip
+*.npy
