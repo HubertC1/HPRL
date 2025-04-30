@@ -10,3 +10,4 @@ karel_dataset/
 *.gif
 *.zip
 *.png
+*.npy
