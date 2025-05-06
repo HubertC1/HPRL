@@ -283,6 +283,9 @@ class SupervisedModel(BaseModel):
         b_z_action_masks        = b_z_output['action_masks']
         pre_tanh_b_z            = b_z_output['pre_tanh']
         b_z                     = b_z_output['z']
+        if self.config['normalize_latent']:
+            z = z / torch.norm(z, dim=-1, keepdim=True)  # Normalize z
+            b_z = b_z / torch.norm(b_z, dim=-1, keepdim=True)  # Normalize b_z
 
 
         # calculate latent program embedding norm
