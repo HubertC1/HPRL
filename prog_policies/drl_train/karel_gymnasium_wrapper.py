@@ -5,7 +5,7 @@ import sys
 import os
 
 
-from prog_policies.karel_tasks import StairClimberSparse,  StairClimber   # or StairClimber
+from prog_policies.karel_tasks import StairClimberSparse,  StairClimber, get_task_cls   # or StairClimber
 from prog_policies.karel import KarelEnvironment
 
 
@@ -22,14 +22,14 @@ class KarelGymEnv(gym.Env):
 
     def __init__(
         self,
-        task_cls=StairClimberSparse,
+        task_name='StairClimberSparse',
         env_args: dict | None = None,
         max_episode_steps: int = 50,
         render_mode: str | None = None,
         seed: int | None = None,
     ):
         super().__init__()
-
+        task_cls = get_task_cls(task_name)
         env_args = env_args or {}
         self.task = task_cls(env_args=env_args, seed=seed)
         self.base_env: KarelEnvironment = self.task.get_environment()
@@ -44,7 +44,7 @@ class KarelGymEnv(gym.Env):
         self.render_mode = render_mode
         self._max_steps = max_episode_steps
         self._step_cnt = 0
-        # self.render()
+        self.render(task_name)
 
     # ----------  Gymnasium API  ----------
     def reset(self, *, seed: int | None = None, options=None):
@@ -79,7 +79,7 @@ class KarelGymEnv(gym.Env):
             img = Image.fromarray(state_image)
             save_dir = f"prog_policies/drl_train/gifs/{task_name}"
             os.makedirs(save_dir, exist_ok=True)
-            save_path = os.join(save_dir, f"{self.seed}.png")
+            save_path = os.path.join(save_dir, f"{self.seed}.png")
             img.save(save_path)
 
     def close(self):

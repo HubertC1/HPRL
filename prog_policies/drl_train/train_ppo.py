@@ -38,7 +38,7 @@ def make_env(seed: int = 0):
     # Gymnasium’s register() not strictly needed, we just return the wrapper.
     def _thunk():
         env = KarelGymEnv(
-            task_cls=get_task_cls(task_name),
+            task_name=task_name,
             env_args=env_args,
             seed=seed
         )
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     
     def generate_eval_env(seed):
         eval_env =  KarelGymEnv(
-                    task_cls=get_task_cls(task_name),
+                    task_name=task_name,
                     env_args=env_args,
                     seed=seed
                 )
