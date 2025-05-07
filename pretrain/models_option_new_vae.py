@@ -883,12 +883,25 @@ class VAE(torch.nn.Module):
                                 unit_size=kwargs['net']['num_rnn_encoder_units'],
                                 **kwargs)
         elif kwargs['behavior_representation'] == 'action_sequence':
-            self.behavior_encoder = ActionBehaviorEncoder(recurrent=kwargs['recurrent_policy'],
+            if self._use_transformer_behavior:
+                self.behavior_encoder = ActionBehaviorEncoderTransformer(
+                                recurrent=kwargs['recurrent_policy'],
                                 num_actions=kwargs['dsl']['num_agent_actions'],
-                                hidden_size=kwargs['num_lstm_cell_units'], rnn_type=kwargs['net']['rnn_type'],
-                                dropout=kwargs['net']['dropout'], use_linear=kwargs['net']['use_linear'],
+                                hidden_size=kwargs['num_lstm_cell_units'], 
+                                rnn_type=kwargs['net']['rnn_type'],
+                                dropout=kwargs['net']['dropout'], 
+                                use_linear=kwargs['net']['use_linear'],
                                 unit_size=kwargs['net']['num_rnn_encoder_units'],
+                                transformer_layers=kwargs['net']['transformer_layers'],
+                                transformer_heads=kwargs['net']['transformer_heads'],
                                 **kwargs)
+            else:
+                self.behavior_encoder = ActionBehaviorEncoder(recurrent=kwargs['recurrent_policy'],
+                                    num_actions=kwargs['dsl']['num_agent_actions'],
+                                    hidden_size=kwargs['num_lstm_cell_units'], rnn_type=kwargs['net']['rnn_type'],
+                                    dropout=kwargs['net']['dropout'], use_linear=kwargs['net']['use_linear'],
+                                    unit_size=kwargs['net']['num_rnn_encoder_units'],
+                                    **kwargs)
         if True:
             self.program_encoder = ProgramEncoder(num_inputs, num_outputs, recurrent=kwargs['recurrent_policy'],
                                 hidden_size=kwargs['num_lstm_cell_units'], rnn_type=kwargs['net']['rnn_type'],

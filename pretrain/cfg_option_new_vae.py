@@ -37,6 +37,7 @@ config = {
         'num_rnn_decoder_units': 256,
         'use_transformer_encoder': False,
         'use_transformer_decoder': False,
+        
         'transformer': {                            # transformer unit setting
             'd_word_vec': 32,                       # dimension of word embedding
             'd_k': 4,
