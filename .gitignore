@@ -11,3 +11,7 @@ karel_dataset/
 *.zip
 *.png
 *.npy
+pretrain/action_fuse_all_new/
+pretrain/action_fuse_all_dataset_clip/
+pretrain/output_dir_new_vae_L40_1m_30epoch_20230104_cpu
+run_cpu.sh

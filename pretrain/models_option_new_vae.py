@@ -52,10 +52,11 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.autograd import Variable
 
+# For RoPE
+from torchtune.modules import RotaryPositionalEmbeddings
+
 from rl.model_option import NNBase
 from rl.utils import init
-
-
 
 class ActionBehaviorEncoder(NNBase):
     def __init__(
@@ -182,6 +183,174 @@ class ActionBehaviorEncoder(NNBase):
         final_hidden = final_hidden.view(B, R, out_dim)  # [B, R, out_dim]
         behavior_embedding = final_hidden.mean(dim=1)  # [B, out_dim]
 
+        return behavior_embedding
+
+
+class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
+    def __init__(
+        self,
+        recurrent,
+        num_actions,
+        hidden_size=64,
+        rnn_type='GRU',
+        dropout=0.0,
+        use_linear=False,
+        unit_size=256,
+        **kwargs
+    ):
+        """
+        Transformer-based encoder for action sequences.
+        
+        This class extends ActionBehaviorEncoder but replaces the RNN with a Transformer.
+        """
+        # Initialize the parent class without recurrent=True
+        super(ActionBehaviorEncoderTransformer, self).__init__(
+            recurrent=False,  # We'll use transformer instead
+            num_actions=num_actions,
+            hidden_size=hidden_size,
+            rnn_type=rnn_type,
+            dropout=dropout,
+            use_linear=use_linear,
+            unit_size=unit_size,
+            **kwargs
+        )
+        
+        # Get transformer parameters from kwargs with defaults
+        self.fuse_s_0 = kwargs['fuse_s_0']
+        self.num_layers = kwargs['net']['transformer_layers']
+        self.num_heads = kwargs['net']['transformer_heads']
+        self.causal_attn = kwargs.get('causal_attention', True)
+        
+        # end-of-sentence
+        self.eos_token = nn.Parameter(torch.zeros(1, 1, unit_size))
+        nn.init.normal_(self.eos_token, std=0.02)
+        
+        # Layer norm before transformer
+        self.pre_transformer_ln = nn.LayerNorm(unit_size)
+        
+        # Create transformer encoder layer
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=unit_size,
+            nhead=self.num_heads,
+            dim_feedforward=unit_size*4,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True
+        )
+        
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer, 
+            num_layers=self.num_layers
+        )
+        
+        self.final_ln = nn.LayerNorm(unit_size)
+        
+        if use_linear:
+            self.proj = nn.Linear(unit_size, hidden_size)
+
+    def forward(self, s_h, a_h, s_h_len, a_h_len):
+        """
+        Encode a sequence of actions using a causal transformer with EOS token.
+        
+        :param s_h: shape (B, R, T, C, H, W) — B = programs, R = rollouts, T = time
+        :param a_h: shape (B, R, T), each entry is an action ID
+        :param s_h_len: sequence lengths for each rollout, shape (B, R)
+        :param a_h_len: action sequence lengths, shape (B, R)
+        :return: shape (B, out_dim), aggregated behavior embedding
+        """
+        # Initial state processing (similar to parent class)
+        s_0 = s_h[:, :, 0, :, :, :]  # (B, R, T, C, H, W)
+        B, R, C, H, W = s_0.shape
+        B_rolled = B * R
+        device = s_h.device
+
+        new_s0 = s_0.view(B_rolled, C, H, W)
+        state_embeddings = self.state_encoder(new_s0)  # [B*R, hidden_size]
+        state_embed = self.state_projector(state_embeddings)  # [B*R, unit_size]
+
+        # Action sequence processing
+        B, R, T = a_h.shape
+        a_h_flat = a_h.view(B_rolled, T).long()
+        a_h_len_flat = a_h_len.view(B_rolled)
+
+        embedded_actions = self.action_encoder(a_h_flat)  # [B*R, T, unit_size]
+        
+        # Handle state fusion
+        if self.fuse_s_0:
+            # Add +1 to make room for EOS token in all cases
+            seq_len_T = T + 1
+            # Create input with extra position for EOS
+            transformer_input = torch.zeros(B_rolled, seq_len_T, self.unit_size, device=device)
+            transformer_input[:, :T, :] = embedded_actions  # Place actions in first T positions
+            seq_lengths = a_h_len_flat
+        else:
+             # Prepend s_0 to action sequence, add +1 for EOS
+            seq_len_T = T + 2  # +1 for s_0, +1 for EOS
+            transformer_input = torch.zeros(B_rolled, seq_len_T, self.unit_size, device=device)
+            transformer_input[:, 0, :] = state_embed  # First position is state
+            transformer_input[:, 1:T+1, :] = embedded_actions  # Then actions
+            seq_lengths = a_h_len_flat + 1  # +1 for prepended state
+        
+        # Add EOS token at the end of each valid sequence
+        for i in range(B_rolled):
+            seq_len = seq_lengths[i].item()
+            # Always place EOS token right after the valid sequence
+            transformer_input[i, seq_len] = self.eos_token.squeeze(0).squeeze(0)
+
+        # Create padding mask (values to be masked = True)
+        # Everything after the EOS token should be masked
+        padding_mask = torch.arange(seq_len_T, device=device).expand(B_rolled, seq_len_T) > (seq_lengths + 1).unsqueeze(1)
+                
+        # Apply layer normalization before transformer
+        transformer_input = self.pre_transformer_ln(transformer_input)
+
+        causal_mask = None
+        if self.causal_attn:
+            causal_mask = torch.triu(torch.ones(seq_len_T, seq_len_T, device=device) * float('-inf'), diagonal=1)
+        
+        # Apply transformer encoder with native causal masking
+        transformer_output = self.transformer_encoder(
+            src=transformer_input,
+            mask=causal_mask,
+            src_key_padding_mask=padding_mask,
+            is_causal=self.causal_attn  # Native causal masking is sufficient
+        )  # [B*R, T, unit_size]
+        
+        # Apply final layer norm
+        transformer_output = self.final_ln(transformer_output)
+        
+        # Extract embeddings at the end of each valid sequence (including EOS)
+        sequence_embeddings = []
+        for i in range(B_rolled):
+            # Get the actual sequence length (might be shorter than T)
+            seq_len = seq_lengths[i].item()
+            # Use the EOS token position (or last valid position if no EOS)
+            seq_len = min(seq_len, T-1)  # Ensure index is valid
+            sequence_embeddings.append(transformer_output[i, seq_len])
+        
+        # Stack to get final embeddings
+        final_hidden = torch.stack(sequence_embeddings)  # [B*R, unit_size]
+        
+        # Fuse with s_0 after transformer if enabled
+        if self.fuse_s_0:
+            # Similar to the parent class, we add state_embed to final_hidden
+            fused = final_hidden + state_embed  # [B*R, unit_size]
+            final_hidden = fused
+        
+        # Optional projection: [B*R, hidden_size]
+        if self._use_linear:
+            final_hidden = self.proj(final_hidden)
+            out_dim = self.hidden_size
+        else:
+            out_dim = self.unit_size
+
+        # Reshape to [B, R, out_dim]
+        final_hidden = final_hidden.reshape(B, R, out_dim)
+        
+        # Mean over R rollouts: [B, out_dim]
+        behavior_embedding = final_hidden.mean(dim=1)
+        
         return behavior_embedding
 
 
@@ -699,6 +868,9 @@ class VAE(torch.nn.Module):
         self._rnn_type            = kwargs['net']['rnn_type']
         self._use_transformer_encoder = kwargs['net']['use_transformer_encoder']
         self._use_transformer_decoder = kwargs['net']['use_transformer_decoder']
+
+        self._use_transformer_behavior = kwargs['net']['use_transformer_behavior']
+        
         print("tanh after sample: ", self._tanh_after_sample)
         print("Option VAE latent STD mu:", self._latent_std_mu)
         print("Option VAE latent STD sigma:", self._latent_std_sigma)
@@ -714,12 +886,25 @@ class VAE(torch.nn.Module):
                                 unit_size=kwargs['net']['num_rnn_encoder_units'],
                                 **kwargs)
         elif kwargs['behavior_representation'] == 'action_sequence':
-            self.behavior_encoder = ActionBehaviorEncoder(recurrent=kwargs['recurrent_policy'],
+            if self._use_transformer_behavior:
+                self.behavior_encoder = ActionBehaviorEncoderTransformer(
+                                recurrent=kwargs['recurrent_policy'],
                                 num_actions=kwargs['dsl']['num_agent_actions'],
-                                hidden_size=kwargs['num_lstm_cell_units'], rnn_type=kwargs['net']['rnn_type'],
-                                dropout=kwargs['net']['dropout'], use_linear=kwargs['net']['use_linear'],
+                                hidden_size=kwargs['num_lstm_cell_units'], 
+                                rnn_type=kwargs['net']['rnn_type'],
+                                dropout=kwargs['net']['dropout'], 
+                                use_linear=kwargs['net']['use_linear'],
                                 unit_size=kwargs['net']['num_rnn_encoder_units'],
+                                transformer_layers=kwargs['net']['transformer_layers'],
+                                transformer_heads=kwargs['net']['transformer_heads'],
                                 **kwargs)
+            else:
+                self.behavior_encoder = ActionBehaviorEncoder(recurrent=kwargs['recurrent_policy'],
+                                    num_actions=kwargs['dsl']['num_agent_actions'],
+                                    hidden_size=kwargs['num_lstm_cell_units'], rnn_type=kwargs['net']['rnn_type'],
+                                    dropout=kwargs['net']['dropout'], use_linear=kwargs['net']['use_linear'],
+                                    unit_size=kwargs['net']['num_rnn_encoder_units'],
+                                    **kwargs)
         if True:
             self.program_encoder = ProgramEncoder(num_inputs, num_outputs, recurrent=kwargs['recurrent_policy'],
                                 hidden_size=kwargs['num_lstm_cell_units'], rnn_type=kwargs['net']['rnn_type'],
