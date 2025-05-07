@@ -868,6 +868,9 @@ class VAE(torch.nn.Module):
         self._rnn_type            = kwargs['net']['rnn_type']
         self._use_transformer_encoder = kwargs['net']['use_transformer_encoder']
         self._use_transformer_decoder = kwargs['net']['use_transformer_decoder']
+
+        self._use_transformer_behavior = kwargs['net']['use_transformer_behavior']
+        
         print("tanh after sample: ", self._tanh_after_sample)
         print("Option VAE latent STD mu:", self._latent_std_mu)
         print("Option VAE latent STD sigma:", self._latent_std_sigma)
