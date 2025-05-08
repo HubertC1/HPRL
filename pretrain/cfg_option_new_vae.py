@@ -37,7 +37,8 @@ config = {
         'num_rnn_decoder_units': 256,
         'use_transformer_encoder': False,
         'use_transformer_decoder': False,
-        'use_transformer_behavior': True,          # use transformer for behavior encoding instead of RNN
+        'use_transformer_encoder_behavior': True,   # use transformer for behavior encoding instead of RNN
+        'use_transformer_decoder_behavior': True,   # use transformer for behavior encoding instead of RNN
         'transformer_layers': 2,                    # number of transformer layers for behavior encoder
         'transformer_heads': 4,                     # number of attention heads for behavior encoder
         'transformer': {                            # transformer unit setting
@@ -357,9 +358,9 @@ config = {
         'contrastive_loss_coef': 1.0,               # coefficient of contrastive loss in VAE during SL training
         'clip_loss_coef': 1.0,                     # coefficient of clip loss in VAE during SL training
         'enabled_losses': {
-            'z_rec': True,
+            'z_rec': False,
             'b_z_rec': True,
-            'contrastive_loss': 'clip',      # 'contrastive', 'clip', 'none'
+            'contrastive_loss': 'none',      # 'contrastive', 'clip', 'none'
             'latent': False,
             'z_condition': False,
             'b_z_condition': False,
