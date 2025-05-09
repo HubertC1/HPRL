@@ -107,7 +107,6 @@ class SupervisedModel(BaseModel):
         # Normalize embeddings
         z = z / torch.norm(z, dim=-1, keepdim=True)
         b_z = b_z / torch.norm(b_z, dim=-1, keepdim=True)
-        
         # Compute similarity matrix (cosine similarity)
         similarity = torch.matmul(z, b_z.T)
         
@@ -467,6 +466,7 @@ class SupervisedModel(BaseModel):
             'b_z_generated_programs': b_z_generated_programs,
             'program_ids': ids,
             'latent_vectors': z.detach().cpu().numpy().tolist(),
+            'behavior_vectors': b_z.detach().cpu().numpy().tolist(),
             'encoder_time': encoder_time,
             'decoder_time': decoder_time}
 
