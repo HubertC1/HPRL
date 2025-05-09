@@ -1365,7 +1365,7 @@ class VAE(torch.nn.Module):
             if self._use_transformer_decoder_behavior:
                 self.decoder = DecoderTransformer(num_inputs, num_outputs, recurrent=kwargs['recurrent_policy'],
                                     hidden_size=kwargs['num_lstm_cell_units'], rnn_type=kwargs['net']['rnn_type'],
-                                    two_head=kwargs['two_head'], dropout=kwargs['net']['dropout'], 
+                                    num_program_tokens=num_program_tokens, dropout=kwargs['net']['dropout'], 
                                     unit_size=kwargs['net']['num_rnn_decoder_units'], **kwargs)
             else:
                 self.decoder = Decoder(num_inputs, num_outputs, recurrent=kwargs['recurrent_policy'],

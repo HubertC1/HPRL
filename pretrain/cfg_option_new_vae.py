@@ -366,5 +366,5 @@ config = {
             'b_z_condition': False,
         },
     },
-    'normalize_latent': True,
+    'normalize_latent': False,
 }
