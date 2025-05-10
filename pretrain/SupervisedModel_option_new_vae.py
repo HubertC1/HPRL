@@ -90,6 +90,9 @@ class SupervisedModel(BaseModel):
         neg_loss = F.relu(margin - neg_dists).sum() / (B * (B - 1))
 
         return pos_loss + neg_loss
+    def _get_mse_loss(self, z, b_z):
+        loss = F.mse_loss(z, b_z)
+        return loss
 
     def _get_clip_loss(self, z, b_z):
         """
@@ -104,7 +107,6 @@ class SupervisedModel(BaseModel):
         # Normalize embeddings
         z = z / torch.norm(z, dim=-1, keepdim=True)
         b_z = b_z / torch.norm(b_z, dim=-1, keepdim=True)
-        
         # Compute similarity matrix (cosine similarity)
         similarity = torch.matmul(z, b_z.T)
         
@@ -324,7 +326,7 @@ class SupervisedModel(BaseModel):
                                                                                                b_z_action_logits,
                                                                                                b_z_action_masks)
         clip_loss, clip_acc = self._get_clip_loss(z, b_z)
-        contrastive_loss = self._get_contrastive_loss(z, b_z)
+        contrastive_loss = self._get_contrastive_loss(z, b_z, self.config['loss']['contrastive_loss_margin'])
 
         # total loss
         cfg_losses = self.config['loss']['enabled_losses']
@@ -338,6 +340,8 @@ class SupervisedModel(BaseModel):
             loss += clip_loss
         if cfg_losses.get('contrastive_loss', False) == 'contrastive':
             loss += contrastive_loss
+        if cfg_losses.get('contrastive_loss', False) == 'mse':
+            loss += self._get_mse_loss(z, b_z)
         if cfg_losses.get('latent', False):
             loss += self.config['loss']['latent_loss_coef'] * lat_loss
         if cfg_losses.get('z_condition', False):
@@ -462,6 +466,7 @@ class SupervisedModel(BaseModel):
             'b_z_generated_programs': b_z_generated_programs,
             'program_ids': ids,
             'latent_vectors': z.detach().cpu().numpy().tolist(),
+            'behavior_vectors': b_z.detach().cpu().numpy().tolist(),
             'encoder_time': encoder_time,
             'decoder_time': decoder_time}
 

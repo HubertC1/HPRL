@@ -11,6 +11,7 @@ from torch.optim import lr_scheduler
 
 from rl.utils import get_vec_normalize, count_parameters
 from pretrain.misc_utils import log_record_dict
+from pretrain.utils import analyze_z_bz
 
 optim_list = {
     'sgd': torch.optim.SGD,
@@ -108,6 +109,7 @@ class BaseModel(object):
         batch_info_list = defaultdict(list)
         batch_gt_programs, batch_z_pred_programs, batch_b_z_pred_programs, batch_gen_programs = [], [], [], []
         batch_program_ids, batch_latent_programs = [], []
+        batch_latent_behaviors = []
         for batch_idx, batch in enumerate(data_loader):
 
             batch_info = self._run_batch(batch, mode)
@@ -139,6 +141,7 @@ class BaseModel(object):
             batch_b_z_pred_programs.append(batch_info['b_z_pred_programs'])
             batch_program_ids.append(batch_info['program_ids'])
             batch_latent_programs.append(batch_info['latent_vectors'])
+            batch_latent_behaviors.append(batch_info['behavior_vectors'])
 
             self.logger.debug("epoch:{} batch:{}/{} current batch loss: {}".format(epoch, batch_idx, num_batches,
                                                                                    batch_info['total_loss']))
@@ -176,6 +179,7 @@ class BaseModel(object):
         epoch_info['generated_programs'] = batch_gen_programs
         optinal_epoch_info['program_ids'] = batch_program_ids
         optinal_epoch_info['program_latent_vectors'] = batch_latent_programs
+        optinal_epoch_info['behavior_latent_vectors'] = batch_latent_behaviors
         for key, val in batch_info_list.items():
             if ('loss' in key or 'accuracy' in key):
                 vtype = 'loss' if 'loss' in key else 'accuracy'
@@ -268,8 +272,10 @@ class BaseModel(object):
                        'saved_params_path'] is not None, 'need trained parameters to evaluate, got {}'.format(
                 self.config['net']['saved_params_path'])
 
-        epoch_records, _ = self._run_epoch(data_loader, 'eval', epoch, *args, **kwargs)
-
+        epoch_records, optinal_epoch_records = self._run_epoch(data_loader, 'eval', epoch, *args, **kwargs)
+        epoch_z = optinal_epoch_records['program_latent_vectors']
+        epoch_bz = optinal_epoch_records['behavior_latent_vectors']
+        analyze_z_bz(epoch_z, epoch_bz)
         # Log and print epoch records
         log_record_dict('eval', epoch_records, self.global_logs)
         self._print_record_dict(epoch_records, 'Eval', time.time() - t)
