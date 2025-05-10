@@ -23,3 +23,6 @@ pyyaml>=6.0
 imageio
 imageio[ffmpeg]
 pillow<10.1.0
+
+# torchtune
+scikit-learn
