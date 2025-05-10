@@ -13,8 +13,9 @@ from prog_policies.karel_tasks import get_task_cls
 from fetch_mapping import fetch_mapping
 
 # ─────────────────────────  paths ───────────────────────────────
-PPO_ZIP = "/home/hubertchang/HPRL/ppo_karel_stairclimber_sparse.zip"
-CKPT    = "/home/vincentchang/HPRL/pretrain/action_fuse_all_dataset_clip/LEAPSL_tanh_epoch30_L40_1m_h64_u256_option_latent_p1_gru_linear_cuda8-handwritten-123-20250428-153442/best_valid_params.ptp"
+# PPO_ZIP = "/home/hubertchang/HPRL/ppo_karel_stairclimber_sparse.zip"
+PPO_ZIP = "/home/hubertchang/HPRL/ppo_karel_maze.zip"
+CKPT    = "/home/hubertchang/HPRL/pretrain/output_dir_new_vae_L40_1m_30epoch_20230104/LEAPSL_tanh_epoch30_L40_1m_h64_u256_option_latent_p1_gru_linear_cuda8-handwritten-123-20250508-114518/best_valid_params.ptp"
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_grad_enabled(False)
@@ -39,8 +40,9 @@ print(f"num_program_tokens:{config['num_program_tokens']}")
 # ─── ENVIRONMENT helper (matches PPO training) ────────────────────
 env_args = dict(env_height=8, env_width=8, crashable=True,
                 leaps_behaviour=False, max_calls=10000)
-TaskCls = get_task_cls("StairClimber")
-def make_env(seed): return KarelGymEnv(task_cls=TaskCls, env_args=env_args, seed=seed)
+# TaskName = "StairClimber"
+TaskName = "Maze"
+def make_env(seed): return KarelGymEnv(task_name=TaskName, env_args=env_args, seed=seed)
 
 dummy_env  = make_env(0)
 NUM_ACT    = dummy_env.action_space.n           # ← fixed bug: ask env
@@ -51,7 +53,8 @@ MAX_DEMO_L = config['max_demo_length']
 ppo = PPO.load(PPO_ZIP, device=device)
 
 states, actions, s_len, a_len = [], [], [], []
-for _ in range(10):
+num_rollouts = 30
+for _ in range(num_rollouts):
     env, done = make_env(random.randint(0, 2**31-1)), False
     obs,_ = env.reset()
     S, A = [env.task.environment.get_state().copy()], []
@@ -65,7 +68,7 @@ for _ in range(10):
     s_len.append(len(A)+1);                a_len.append(len(A))
 
 # pack tensors  (B=1 because R=10 roll-outs live in second dim)
-B,R,C,H,W = 1,10,*states[0].shape[1:]
+B,R,C,H,W = 1,num_rollouts,*states[0].shape[1:]
 Tmax = MAX_DEMO_L
 s_h = np.zeros((B,R,Tmax+1,C,H,W),np.float32)
 a_h = np.full ((B,R,Tmax)       , NUM_ACT-1,np.int16)
