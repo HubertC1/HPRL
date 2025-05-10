@@ -1302,6 +1302,51 @@ class DecoderTransformer(NNBase):
                eop_pred_programs_all, raw_eop_output_logits_all, output_mask_all, dist_entropy_all
 
 
+class Scalar(nn.Module):
+    """
+    MLP that produces a scalar multiplier for behavior embeddings.
+    
+    Takes a behavior embedding b_z with shape (batch_size, latent_dim)
+    and outputs a scalar multiplier with shape (batch_size, 1).
+    """
+    def __init__(self, latent_dim=64, hidden_dim=128):
+        super(Scalar, self).__init__()
+        
+        # Initialize with standard weight initialization
+        init_ = lambda m: init(
+            m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('relu')
+        )
+        
+        # Create a simple MLP: latent_dim → hidden_dim → hidden_dim → 1
+        self.mlp = nn.Sequential(
+            init_(nn.Linear(latent_dim, hidden_dim)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_dim, hidden_dim)),
+            nn.ReLU(),
+            init_(nn.Linear(hidden_dim, 1)),
+            # Sigmoid to output values between 0 and 1
+            nn.Sigmoid()
+        )
+        
+        # Optional scaling factor to control the range
+        self.scale_factor = nn.Parameter(torch.ones(1))
+        
+    def forward(self, x):
+        """
+        Args:
+            x: Behavior embedding tensor of shape (batch_size, latent_dim)
+            
+        Returns:
+            Scalar multiplier of shape (batch_size, 1)
+        """
+        # Compute scalar multiplier between 0 and scale_factor
+        scalar = self.mlp(x) * self.scale_factor
+        
+        return scalar
+
 class VAE(torch.nn.Module):
 
     def __init__(self, num_inputs, num_program_tokens, **kwargs):
@@ -1320,6 +1365,9 @@ class VAE(torch.nn.Module):
 
         self._use_transformer_encoder_behavior = kwargs['net']['use_transformer_encoder_behavior']
         self._use_transformer_decoder_behavior = kwargs['net']['use_transformer_decoder_behavior']
+        
+        # For scaling b_z
+        self.scalar = Scalar()
         
         print("tanh after sample: ", self._tanh_after_sample)
         print("Option VAE latent STD mu:", self._latent_std_mu)
@@ -1431,7 +1479,8 @@ class VAE(torch.nn.Module):
         combined_mean_sq = combined_mean.pow(2)
         combined_stddev_sq = combined_stddev.pow(2)
 
-        # KL(N(μ,σ²) || N(0,1)) = 0.5 * (μ² + σ² - log(σ²) - 1)
+        # KL(N(μ,σ²) || N
+        # (0,1)) = 0.5 * (μ² + σ² - log(σ²) - 1)
         kl_div = 0.5 * torch.mean(combined_mean_sq + combined_stddev_sq - torch.log(combined_stddev_sq) - 1)
 
         return kl_div
@@ -1466,18 +1515,22 @@ class VAE(torch.nn.Module):
 
         pre_tanh_b_z = self.behavior_encoder(s_h, a_h, s_h_len, a_h_len) #pretanh behavior embedding
         b_z = self.tanh(pre_tanh_b_z)
-        #print(f"z.shape: {z.shape}, b_z.shape: {b_z.shape}")
+        # print(f"z.shape: {z.shape}, b_z.shape: {b_z.shape}")
         
         
         t = time.time()
+        
+        # programs here is the ground truth
         z_outputs = self.decoder(programs, z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
-        b_z_outputs = self.decoder(programs, b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
+        b_z_scalar = self.scalar(b_z)
+        scaled_b_z = b_z*b_z_scalar
+        b_z_outputs = self.decoder(programs, scaled_b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
+         
+        # b_z_outputs = self.decoder(programs, b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
 
         decoder_time = time.time() - t
 
         return z_outputs, b_z_outputs, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z
-
-
 
 
 

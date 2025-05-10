@@ -358,12 +358,12 @@ config = {
         'contrastive_loss_coef': 1.0,               # coefficient of contrastive loss in VAE during SL training
         'clip_loss_coef': 1.0,                     # coefficient of clip loss in VAE during SL training
         'enabled_losses': {
-            'z_rec': False,
+            'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': 'none',      # 'contrastive', 'clip', 'none'
+            'contrastive_loss': 'clip',      # 'contrastive', 'clip', 'none'
             'latent': False,
-            'z_condition': False,
-            'b_z_condition': False,
+            'z_condition': True,
+            'b_z_condition': True,
         },
     },
     'normalize_latent': False,
