@@ -4,6 +4,11 @@ import numpy as np
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import os
+import wandb
+
+import logging
+logging.getLogger('matplotlib.font_manager').disabled = True
+
 
 def analyze_z_bz(z, bz, save_path="pca_z_bz.png"):
     z_tensor = torch.tensor(z, dtype=torch.float32)
@@ -29,6 +34,16 @@ def analyze_z_bz(z, bz, save_path="pca_z_bz.png"):
     print(f"bZ norm mean/std: {bz_norm.mean():.4f} / {bz_norm.std():.4f}")
     print(f"Mean angle (deg): {angles_rad.mean().item() * 180 / torch.pi:.2f}")
     print(f"Mean scale ratio: {scale_ratio.mean():.4f}")
+
+    wandb.log({
+        'z_norm_mean': z_norm.mean(),
+        'z_norm_std': z_norm.std(),
+        'bz_norm_mean': bz_norm.mean(),
+        'bz_norm_std': bz_norm.std(),
+        'angle_rad_mean': angles_rad.mean(),
+        'angle(deg)': angles_rad.mean().item() * 180 / torch.pi,
+        'scale_ratio_mean': scale_ratio.mean()
+    })
 
     # Mix into a pool and do PCA
     pool = torch.cat([z_flat, bz_flat], dim=0).numpy()  # shape: (2 * 8448, 64)

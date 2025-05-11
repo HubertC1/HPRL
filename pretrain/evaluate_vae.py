@@ -60,7 +60,7 @@ def run(config, logger):
     # Load checkpoint
     # ckpt_path = os.path.join(config['outdir'], 'best_valid_params.ptp')
     # print("Loading checkpoint:", ckpt_path)
-    ckpt_path = "/home/hubertchang/HPRL/pretrain/output_dir_new_vae_L40_1m_30epoch_20230104/LEAPSL_tanh_epoch30_L40_1m_h64_u256_option_latent_p1_gru_linear_cuda8-handwritten-123-20250508-114518/best_valid_params.ptp"
+    ckpt_path = "/home/vincentchang/HPRL/pretrain/action_encoder_norope_alldata/LEAPSL_tanh_epoch30_L40_1m_h64_u256_option_latent_p1_gru_linear_cuda8-handwritten-123-20250510-022930/best_valid_params.ptp"
     model.load_net(ckpt_path)
 
     # Datasets
