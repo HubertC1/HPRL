@@ -63,7 +63,7 @@ class SupervisedModel(BaseModel):
         """Size of rnn_hx."""
         return self.net.base.recurrent_hidden_state_size
 
-    def _get_contrastive_loss(self, z, b_z, margin=1.0):
+    def _get_hinge_loss(self, z, b_z, margin=1.0):
         """
         Contrastive loss with 1:1 matching.
         - z[i] should be close to b_z[i] (positive pair)
@@ -326,7 +326,8 @@ class SupervisedModel(BaseModel):
                                                                                                b_z_action_logits,
                                                                                                b_z_action_masks)
         clip_loss, clip_acc = self._get_clip_loss(z, b_z)
-        contrastive_loss = self._get_contrastive_loss(z, b_z, self.config['loss']['contrastive_loss_margin'])
+        hinge_loss = self._get_hinge_loss(z, b_z, self.config['loss']['contrastive_loss_margin'])
+        mse_loss = self._get_mse_loss(z, b_z)
 
         # total loss
         cfg_losses = self.config['loss']['enabled_losses']
@@ -336,12 +337,12 @@ class SupervisedModel(BaseModel):
             loss += z_rec_loss
         if cfg_losses.get('b_z_rec', False):
             loss += b_z_rec_loss
-        if cfg_losses.get('contrastive_loss', False) == 'clip':
+        if 'clip' in cfg_losses.get('contrastive_loss', []):
             loss += clip_loss
-        if cfg_losses.get('contrastive_loss', False) == 'contrastive':
-            loss += contrastive_loss
-        if cfg_losses.get('contrastive_loss', False) == 'mse':
-            loss += self._get_mse_loss(z, b_z)
+        if 'hinge' in cfg_losses.get('contrastive_loss', []):
+            loss += hinge_loss
+        if 'mse' in cfg_losses.get('contrastive_loss', []):
+            loss += mse_loss
         if cfg_losses.get('latent', False):
             loss += self.config['loss']['latent_loss_coef'] * lat_loss
         if cfg_losses.get('z_condition', False):
@@ -379,7 +380,7 @@ class SupervisedModel(BaseModel):
                 f'{mode}/loss/b_z_condition': b_z_condition_loss.item(),
                 f'{mode}/loss/clip': clip_loss.item(),
                 f'{mode}/loss/clip_accuracy': clip_acc.item(),
-                f'{mode}/loss/contrastive': contrastive_loss.item(),
+                f'{mode}/loss/contrastive': hinge_loss.item(),
 
                 f'{mode}/z_vs_b/decoder_token_accuracy': {
                     'z': z_t_accuracy.item(),
@@ -409,7 +410,7 @@ class SupervisedModel(BaseModel):
             self.eval_metrics['loss/b_z_condition'].append(b_z_condition_loss.item())
             self.eval_metrics['loss/clip'].append(clip_loss.item())
             self.eval_metrics['loss/clip_accuracy'].append(clip_acc.item())
-            self.eval_metrics['loss/contrastive'].append(contrastive_loss.item())
+            self.eval_metrics['loss/contrastive'].append(hinge_loss.item())
             
             self.eval_metrics['z_vs_b/decoder_token_accuracy/z'].append(z_t_accuracy.item())
             self.eval_metrics['z_vs_b/decoder_token_accuracy/b_z'].append(b_z_t_accuracy.item())
@@ -458,7 +459,7 @@ class SupervisedModel(BaseModel):
             'z_condition_loss': z_condition_loss.detach().cpu().numpy().item(),
             'b_z_condition_loss': b_z_condition_loss.detach().cpu().numpy().item(),
             'clip_loss': clip_loss.detach().cpu().numpy().item(),
-            'contrastive_loss': contrastive_loss.detach().cpu().numpy().item(),
+            'contrastive_loss': hinge_loss.detach().cpu().numpy().item(),
             'gt_programs': programs.detach().cpu().numpy(),
             'z_pred_programs': z_pred_programs.detach().cpu().numpy(),
             'b_z_pred_programs': b_z_pred_programs.detach().cpu().numpy(),
