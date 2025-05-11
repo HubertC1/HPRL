@@ -360,7 +360,7 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': 'mse',      # 'contrastive', 'clip', 'mse', 'none'
+            'contrastive_loss': ['clip', 'mse'],      # 'contrastive', 'clip', 'mse', 'none'
             'latent': False,
             'z_condition': True,
             'b_z_condition': True,
@@ -368,4 +368,5 @@ config = {
         'contrastive_loss_margin': 0.01,
     },
     'normalize_latent': False,
+    'use_bz_scalar': False,
 }

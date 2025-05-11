@@ -36,13 +36,13 @@ def analyze_z_bz(z, bz, save_path="pca_z_bz.png"):
     print(f"Mean scale ratio: {scale_ratio.mean():.4f}")
 
     wandb.log({
-        'z_norm_mean': z_norm.mean(),
-        'z_norm_std': z_norm.std(),
-        'bz_norm_mean': bz_norm.mean(),
-        'bz_norm_std': bz_norm.std(),
-        'angle_rad_mean': angles_rad.mean(),
-        'angle(deg)': angles_rad.mean().item() * 180 / torch.pi,
-        'scale_ratio_mean': scale_ratio.mean()
+        'eval/z_norm_mean': z_norm.mean(),
+        'eval/z_norm_std': z_norm.std(),
+        'eval/bz_norm_mean': bz_norm.mean(),
+        'eval/bz_norm_std': bz_norm.std(),
+        'eval/angle_rad_mean': angles_rad.mean(),
+        'eval/angle(deg)': angles_rad.mean().item() * 180 / torch.pi,
+        'eval/scale_ratio_mean': scale_ratio.mean()
     })
 
     # Mix into a pool and do PCA

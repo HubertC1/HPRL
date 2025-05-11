@@ -1367,7 +1367,9 @@ class VAE(torch.nn.Module):
         self._use_transformer_decoder_behavior = kwargs['net']['use_transformer_decoder_behavior']
         
         # For scaling b_z
-        self.scalar = Scalar()
+        self._use_bz_scalar = kwargs['use_bz_scalar']
+        if self._use_bz_scalar:
+            self.scalar = Scalar()
         
         print("tanh after sample: ", self._tanh_after_sample)
         print("Option VAE latent STD mu:", self._latent_std_mu)
@@ -1522,9 +1524,11 @@ class VAE(torch.nn.Module):
         
         # programs here is the ground truth
         z_outputs = self.decoder(programs, z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
-        b_z_scalar = self.scalar(b_z)
-        scaled_b_z = b_z*b_z_scalar
-        b_z_outputs = self.decoder(programs, scaled_b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
+        if self._use_bz_scalar:
+            # Use the scalar to scale the behavior embedding
+            b_z_scalar = self.scalar(b_z)
+            b_z = b_z * b_z_scalar
+        b_z_outputs = self.decoder(programs, b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
          
         # b_z_outputs = self.decoder(programs, b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
 
