@@ -53,7 +53,7 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.autograd import Variable
 
 # For RoPE
-from torchtune.modules import RotaryPositionalEmbeddings
+# from torchtune.modules import RotaryPositionalEmbeddings
 
 from rl.model_option import NNBase
 from rl.utils import init
