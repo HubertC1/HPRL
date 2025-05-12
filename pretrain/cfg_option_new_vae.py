@@ -37,8 +37,8 @@ config = {
         'num_rnn_decoder_units': 256,
         'use_transformer_encoder': False,
         'use_transformer_decoder': False,
-        'use_transformer_encoder_behavior': True,   # use transformer for behavior encoding instead of RNN
-        'use_transformer_decoder_behavior': True,   # use transformer for behavior encoding instead of RNN
+        'use_transformer_encoder_behavior': False,   # use transformer for behavior encoding instead of RNN
+        'use_transformer_decoder_behavior': False,   # use transformer for behavior encoding instead of RNN
         'transformer_layers': 2,                    # number of transformer layers for behavior encoder
         'transformer_heads': 2,                     # number of attention heads for behavior encoder
         'transformer': {                            # transformer unit setting
@@ -360,7 +360,7 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': ['clip', 'mse'],      # 'contrastive', 'clip', 'mse', 'none'
+            'contrastive_loss': ['l2', 'cosine'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
             'latent': False,
             'z_condition': True,
             'b_z_condition': True,
@@ -369,4 +369,5 @@ config = {
     },
     'normalize_latent': False,
     'use_bz_scalar': False,
+    'freeze_p2p': True,
 }

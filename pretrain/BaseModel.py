@@ -24,6 +24,7 @@ optim_list = {
 
 
 def dfs_freeze(model):
+    model.eval()  # disable dropout, batchnorm updates, etc.
     for name, child in model.named_children():
         for param in child.parameters():
             param.requires_grad = False
@@ -73,6 +74,8 @@ class BaseModel(object):
 
         # Initialize epoch number
         self.epoch = 0
+
+        self.program_frozen = False
 
     # FIXME: implement gradien clipping
     def setup_optimizer(self, parameters):
@@ -221,6 +224,15 @@ class BaseModel(object):
             # produce print-out
             if self.verbose:
                 self._print_record_dict(record_dict_eval, 'validation', time.time() - t)
+            if self.config['freeze_p2p'] and not self.program_freeze and record_dict_eval['z_decoder_greedy_token_accuracy'] > 80:
+                self.logger.info(f"Freezing program encoder and decoder at epoch {epoch}")
+                dfs_freeze(self.net)
+                for param in self.net.vae.behavior_encoder.parameters():
+                    param.requires_grad = True
+                self.net.vae.behavior_encoder.train()
+                self.program_frozen = True
+                # Also re-initialize the optimizer to exclude frozen parameters
+                self.setup_optimizer(self.net.parameters())
 
             if record_dict_eval['mean_total_loss'] < best_valid_loss:
                 best_valid_epoch = epoch

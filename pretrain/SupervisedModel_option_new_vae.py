@@ -12,6 +12,7 @@ from pretrain.BaseModel import BaseModel
 from pretrain.models_option_new_vae import VAE, ConditionPolicy, ProgramVAE
 from rl.utils import masked_mean
 import torch.nn.functional as F
+from pretrain.utils import analyze_z_bz
 
 # Add global step tracker as a variable in the module scope
 # But we'll also track it as a class attribute in the SupervisedModel
@@ -258,6 +259,10 @@ class SupervisedModel(BaseModel):
                     'z_vs_b/condition_greedy_action_accuracy/b_z': [],
                     'z_vs_b/condition_greedy_demo_accuracy/z': [],
                     'z_vs_b/condition_greedy_demo_accuracy/b_z': [],
+                    'z_vs_b/bz_norm_mean': [],
+                    'z_vs_b/z_norm_mean': [],
+                    'z_vs_b/norm_ratio': [],
+                    'z_vs_b/z_bz_angle': [],
                 }
 
         programs, ids, trg_mask, s_h, s_h_len, a_h, a_h_len = batch
@@ -288,7 +293,7 @@ class SupervisedModel(BaseModel):
         if self.config['normalize_latent']:
             z = z / torch.norm(z, dim=-1, keepdim=True)  # Normalize z
             b_z = b_z / torch.norm(b_z, dim=-1, keepdim=True)  # Normalize b_z
-
+        zbz_analysis = analyze_z_bz(z, b_z)
 
         # calculate latent program embedding norm
         assert len(pre_tanh_z.shape) == 2
@@ -328,6 +333,9 @@ class SupervisedModel(BaseModel):
         clip_loss, clip_acc = self._get_clip_loss(z, b_z)
         hinge_loss = self._get_hinge_loss(z, b_z, self.config['loss']['contrastive_loss_margin'])
         mse_loss = self._get_mse_loss(z, b_z)
+        cosine_sim_loss = 1-F.cosine_similarity(z, b_z, dim=1).mean()
+        l2_loss = torch.norm(z - b_z, p=2, dim=1).mean()
+        l3_loss = torch.norm(z - b_z, p=3, dim=1).mean()
 
         # total loss
         cfg_losses = self.config['loss']['enabled_losses']
@@ -343,6 +351,12 @@ class SupervisedModel(BaseModel):
             loss += hinge_loss
         if 'mse' in cfg_losses.get('contrastive_loss', []):
             loss += mse_loss
+        if 'cosine' in cfg_losses.get('contrastive_loss', []):
+            loss += cosine_sim_loss
+        if 'l2' in cfg_losses.get('contrastive_loss', []):
+            loss += l2_loss
+        if 'l3' in cfg_losses.get('contrastive_loss', []):
+            loss += l3_loss
         if cfg_losses.get('latent', False):
             loss += self.config['loss']['latent_loss_coef'] * lat_loss
         if cfg_losses.get('z_condition', False):
@@ -398,6 +412,10 @@ class SupervisedModel(BaseModel):
                     'z': z_cond_p_accuracy.item(),
                     'b_z': b_z_cond_p_accuracy.item()
                 },
+                f'{mode}/z_vs_b/z_norm_mean': zbz_analysis['z_norm'].item(),
+                f'{mode}/z_vs_b/bz_norm_mean': zbz_analysis['bz_norm'].item(),
+                f'{mode}/z_vs_b/norm_ratio': zbz_analysis['scale_ratio'].item(),
+                f'{mode}/z_vs_b/z_bz_angle': zbz_analysis['angle_deg'].item(),
             }, step=self.global_train_step)
             
         elif mode == "eval":
@@ -430,6 +448,11 @@ class SupervisedModel(BaseModel):
             self.eval_metrics['z_vs_b/condition_greedy_action_accuracy/b_z'].append(b_z_greedy_a_accuracy.item())
             self.eval_metrics['z_vs_b/condition_greedy_demo_accuracy/z'].append(z_greedy_d_accuracy.item())
             self.eval_metrics['z_vs_b/condition_greedy_demo_accuracy/b_z'].append(b_z_greedy_d_accuracy.item())
+            self.eval_metrics['z_vs_b/z_norm_mean'].append(zbz_analysis['z_norm'])
+            self.eval_metrics['z_vs_b/bz_norm_mean'].append(zbz_analysis['bz_norm'])
+            self.eval_metrics['z_vs_b/norm_ratio'].append(zbz_analysis['scale_ratio'])
+            self.eval_metrics['z_vs_b/z_bz_angle'].append(zbz_analysis['angle_deg'])
+
 
         batch_info = {
             'z_decoder_token_accuracy': z_t_accuracy.detach().cpu().numpy().item(),
@@ -469,6 +492,11 @@ class SupervisedModel(BaseModel):
             'latent_vectors': z.detach().cpu().numpy().tolist(),
             'behavior_vectors': b_z.detach().cpu().numpy().tolist(),
             'encoder_time': encoder_time,
-            'decoder_time': decoder_time}
+            'decoder_time': decoder_time,
+            'bz_norm': zbz_analysis['bz_norm'].detach().cpu().numpy().item(),
+            'z_norm': zbz_analysis['z_norm'].detach().cpu().numpy().item(),
+            'scale_ratio': zbz_analysis['scale_ratio'].detach().cpu().numpy().item(),
+            'angle_deg': zbz_analysis['angle_deg'].detach().cpu().numpy().item(),
+            }
 
         return batch_info
