@@ -38,7 +38,7 @@ def analyze_z_bz(z, bz, save_path="pca_z_bz.png"):
     # Summary statistics
     print(f"Z norm mean/std: {z_norm.mean():.4f} / {z_norm.std():.4f}")
     print(f"bZ norm mean/std: {bz_norm.mean():.4f} / {bz_norm.std():.4f}")
-    print(f"Mean angle (deg): {angels_deg:.4f}")
+    print(f"Mean angle (deg): {angles_deg:.4f}")
     print(f"Mean scale ratio: {scale_ratio.mean():.4f}")
 
     # wandb.log({
@@ -74,11 +74,11 @@ def analyze_z_bz(z, bz, save_path="pca_z_bz.png"):
     # plt.close()
 
     return {
-        'z_norm': z_norm,
-        'bz_norm': bz_norm,
+        'z_norm': z_norm.mean(),
+        'bz_norm': bz_norm.mean(),
         'angle_rad': angles_rad,
         'angle_deg': angles_deg,
-        'scale_ratio': scale_ratio,
+        'scale_ratio': scale_ratio.mean(),
 
         # 'pca_components': reduced
     }
