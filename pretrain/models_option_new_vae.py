@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.autograd import Variable
+from torch.utils.checkpoint import checkpoint
 import gym
 
 from karel_env.tool.syntax_checker import PySyntaxChecker
@@ -232,7 +233,7 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=unit_size,
             nhead=self.num_heads,
-            dim_feedforward=unit_size*4,
+            dim_feedforward=unit_size*2,
             dropout=dropout,
             activation="gelu",
             batch_first=True,
@@ -310,12 +311,20 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
             causal_mask = torch.triu(torch.ones(seq_len_T, seq_len_T, device=device) * float('-inf'), diagonal=1)
         
         # Apply transformer encoder with native causal masking
-        transformer_output = self.transformer_encoder(
-            src=transformer_input,
-            mask=causal_mask,
-            src_key_padding_mask=padding_mask,
-            is_causal=self.causal_attn  # Native causal masking is sufficient
-        )  # [B*R, T, unit_size]
+        # transformer_output = self.transformer_encoder(
+        #     src=transformer_input,
+        #     mask=causal_mask,
+        #     src_key_padding_mask=padding_mask,
+        #     is_causal=self.causal_attn  # Native causal masking is sufficient
+        # )  # [B*R, T, unit_size]
+        
+        transformer_output = checkpoint(
+            self.transformer_encoder,
+            transformer_input,
+            causal_mask,
+            padding_mask,
+            self.causal_attn
+        )
         
         # Apply final layer norm
         transformer_output = self.final_ln(transformer_output)
@@ -894,7 +903,7 @@ class DecoderTransformer(NNBase):
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=unit_size,
             nhead=self.num_heads,
-            dim_feedforward=unit_size*4,
+            dim_feedforward=unit_size*2,
             dropout=dropout,
             activation="gelu",
             batch_first=True,
@@ -1019,10 +1028,16 @@ class DecoderTransformer(NNBase):
         
         # Run transformer decoder
         # For first step, there's no self-attention mask
-        transformer_out = self.transformer_decoder(
-            tgt=decoder_input,  # Target sequence (tokens so far)
-            memory=memory,      # Memory from encoder (latent embedding)
-            tgt_mask=causal_mask  # Causal mask for self-attention
+        # transformer_out = self.transformer_decoder(
+        #     tgt=decoder_input,  # Target sequence (tokens so far)
+        #     memory=memory,      # Memory from encoder (latent embedding)
+        #     tgt_mask=causal_mask  # Causal mask for self-attention
+        # )
+        transformer_out = checkpoint(
+            self.transformer_decoder,
+            decoder_input,  # Target sequence (tokens so far)
+            memory,         # Memory from encoder (latent embedding)
+            causal_mask     # Causal mask for self-attention
         )
         
         # Apply final layer norm

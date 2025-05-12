@@ -40,7 +40,7 @@ config = {
         'use_transformer_encoder_behavior': True,   # use transformer for behavior encoding instead of RNN
         'use_transformer_decoder_behavior': True,   # use transformer for behavior encoding instead of RNN
         'transformer_layers': 2,                    # number of transformer layers for behavior encoder
-        'transformer_heads': 4,                     # number of attention heads for behavior encoder
+        'transformer_heads': 2,                     # number of attention heads for behavior encoder
         'transformer': {                            # transformer unit setting
             'd_word_vec': 32,                       # dimension of word embedding
             'd_k': 4,
