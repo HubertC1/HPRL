@@ -348,7 +348,7 @@ class SupervisedModel(BaseModel):
         cfg_losses = self.config['loss']['enabled_losses']
         loss = 0.0
 
-        if not self.program_frozen and not self.start_dedcoder_finetune:
+        if not self.program_frozen and not self.start_decoder_finetune:
             if cfg_losses.get('z_rec', False):
                 loss += z_rec_loss
             if cfg_losses.get('b_z_rec', False):
@@ -374,7 +374,7 @@ class SupervisedModel(BaseModel):
         elif self.program_frozen:
             # If the program is frozen, we only compute the cosine loss
             loss += cosine_sim_loss
-        elif self.start_dedcoder_finetune:
+        elif self.start_decoder_finetune:
             loss += b_z_rec_loss
 
         # loss = contrastive_loss 
