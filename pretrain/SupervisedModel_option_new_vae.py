@@ -345,28 +345,32 @@ class SupervisedModel(BaseModel):
         cfg_losses = self.config['loss']['enabled_losses']
         loss = 0.0
 
-        if cfg_losses.get('z_rec', False):
-            loss += z_rec_loss
-        if cfg_losses.get('b_z_rec', False):
-            loss += b_z_rec_loss
-        if 'clip' in cfg_losses.get('contrastive_loss', []):
-            loss += clip_loss
-        if 'hinge' in cfg_losses.get('contrastive_loss', []):
-            loss += hinge_loss
-        if 'mse' in cfg_losses.get('contrastive_loss', []):
-            loss += mse_loss
-        if 'cosine' in cfg_losses.get('contrastive_loss', []):
+        if not self.program_frozen:
+            if cfg_losses.get('z_rec', False):
+                loss += z_rec_loss
+            if cfg_losses.get('b_z_rec', False):
+                loss += b_z_rec_loss
+            if 'clip' in cfg_losses.get('contrastive_loss', []):
+                loss += clip_loss
+            if 'hinge' in cfg_losses.get('contrastive_loss', []):
+                loss += hinge_loss
+            if 'mse' in cfg_losses.get('contrastive_loss', []):
+                loss += mse_loss
+            if 'cosine' in cfg_losses.get('contrastive_loss', []):
+                loss += cosine_sim_loss
+            if 'l2' in cfg_losses.get('contrastive_loss', []):
+                loss += l2_loss
+            if 'l3' in cfg_losses.get('contrastive_loss', []):
+                loss += l3_loss
+            if cfg_losses.get('latent', False):
+                loss += self.config['loss']['latent_loss_coef'] * lat_loss
+            if cfg_losses.get('z_condition', False):
+                loss += self.config['loss']['condition_loss_coef'] * z_condition_loss
+            if cfg_losses.get('b_z_condition', False):
+                loss += self.config['loss']['condition_loss_coef'] * b_z_condition_loss
+        else:
+            # If the program is frozen, we only compute the cosine loss
             loss += cosine_sim_loss
-        if 'l2' in cfg_losses.get('contrastive_loss', []):
-            loss += l2_loss
-        if 'l3' in cfg_losses.get('contrastive_loss', []):
-            loss += l3_loss
-        if cfg_losses.get('latent', False):
-            loss += self.config['loss']['latent_loss_coef'] * lat_loss
-        if cfg_losses.get('z_condition', False):
-            loss += self.config['loss']['condition_loss_coef'] * z_condition_loss
-        if cfg_losses.get('b_z_condition', False):
-            loss += self.config['loss']['condition_loss_coef'] * b_z_condition_loss
             
 
         # loss = contrastive_loss 
