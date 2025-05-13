@@ -283,6 +283,7 @@ class SupervisedModel(BaseModel):
         z_action_masks        = z_output['action_masks']
         pre_tanh_z            = z_output['pre_tanh']
         z                     = z_output['z']
+        z_mu = z_output['z_mu']
 
         b_z_pred_programs       = b_z_output['pred_programs']
         b_z_pred_programs_len   = b_z_output['pred_programs_len']
@@ -294,6 +295,8 @@ class SupervisedModel(BaseModel):
         b_z_action_masks        = b_z_output['action_masks']
         pre_tanh_b_z            = b_z_output['pre_tanh']
         b_z                     = b_z_output['z']
+        b_z_mu = b_z_output['z_mu']
+
         if self.config['normalize_latent']:
             z = z / torch.norm(z, dim=-1, keepdim=True)  # Normalize z
             b_z = b_z / torch.norm(b_z, dim=-1, keepdim=True)  # Normalize b_z
@@ -334,18 +337,18 @@ class SupervisedModel(BaseModel):
             b_z_condition_loss, b_z_cond_t_accuracy, b_z_cond_p_accuracy = self._get_condition_loss(a_h, a_h_len,
                                                                                                b_z_action_logits,
                                                                                                b_z_action_masks)
-        clip_loss, clip_acc = self._get_clip_loss(z, b_z)
-        hinge_loss = self._get_hinge_loss(z, b_z, self.config['loss']['contrastive_loss_margin'])
-        mse_loss = self._get_mse_loss(z, b_z)
-        cosine_sim_loss = 1-F.cosine_similarity(z, b_z, dim=1).mean()
-        l2_loss = torch.norm(z - b_z, p=2, dim=1).mean()
-        l3_loss = torch.norm(z - b_z, p=3, dim=1).mean()
+        clip_loss, clip_acc = self._get_clip_loss(z_mu, b_z_mu)
+        hinge_loss = self._get_hinge_loss(z_mu, b_z_mu, self.config['loss']['contrastive_loss_margin'])
+        mse_loss = self._get_mse_loss(z_mu, b_z_mu)
+        cosine_sim_loss = 1-F.cosine_similarity(z_mu, b_z_mu, dim=1).mean()
+        l2_loss = torch.norm(z_mu - b_z_mu, p=2, dim=1).mean()
+        l3_loss = torch.norm(z_mu - b_z_mu, p=3, dim=1).mean()
 
         # total loss
         cfg_losses = self.config['loss']['enabled_losses']
         loss = 0.0
 
-        if not self.program_frozen:
+        if not self.program_frozen and not self.start_dedcoder_finetune:
             if cfg_losses.get('z_rec', False):
                 loss += z_rec_loss
             if cfg_losses.get('b_z_rec', False):
@@ -368,10 +371,11 @@ class SupervisedModel(BaseModel):
                 loss += self.config['loss']['condition_loss_coef'] * z_condition_loss
             if cfg_losses.get('b_z_condition', False):
                 loss += self.config['loss']['condition_loss_coef'] * b_z_condition_loss
-        else:
+        elif self.program_frozen:
             # If the program is frozen, we only compute the cosine loss
             loss += cosine_sim_loss
-            
+        elif self.start_dedcoder_finetune:
+            loss += b_z_rec_loss
 
         # loss = contrastive_loss 
 

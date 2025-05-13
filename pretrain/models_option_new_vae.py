@@ -1465,7 +1465,7 @@ class VAE(torch.nn.Module):
         self.z_mean = mu
         self.z_sigma = sigma
 
-        return mu + sigma * Variable(std_z, requires_grad=False)  # Reparameterization trick
+        return mu, mu + sigma * Variable(std_z, requires_grad=False)  # Reparameterization trick
 
     def _sample_latent_bz(self, h_enc):
         """
@@ -1480,7 +1480,7 @@ class VAE(torch.nn.Module):
             sigma = self.tanh(sigma)
         self.b_z_mean = mu
         self.b_z_sigma = sigma
-        return mu + sigma * Variable(std_bz, requires_grad=False)  # Reparameterization trick
+        return mu, mu + sigma * Variable(std_bz, requires_grad=False)  # Reparameterization trick
 
 
     @staticmethod
@@ -1540,18 +1540,27 @@ class VAE(torch.nn.Module):
             h_enc = output_enc_mean
 
         if self._rnn_type == 'GRU':
-            z = h_enc.squeeze() if self._vanilla_ae else self._sample_latent(h_enc.squeeze())
+            if self._vanilla_ae:
+                z = h_enc.squeezee()
+            else:
+                z_mu, z = self._sample_latent(h_enc.squeeze())
         elif self._rnn_type == 'LSTM':
-            z = h_enc[0].squeeze() if self._vanilla_ae else self._sample_latent(h_enc[0].squeeze())
+            if self._vanilla_ae:
+                z = h_enc[0].squeeze()
+            else:
+                z_mu, z = self._sample_latent(h_enc[0].squeeze())
         else:
             raise NotImplementedError()
         
         pre_tanh_z = z
-        if self._tanh_after_sample:
-            z = self.tanh(z)
+        b_z_mu, b_z = self._sample_latent_bz(self.behavior_encoder(s_h, a_h, s_h_len, a_h_len)) #pretanh behavior embedding
+        pre_tanh_b_z = b_z
 
-        pre_tanh_b_z = self._sample_latent_bz(self.behavior_encoder(s_h, a_h, s_h_len, a_h_len)) #pretanh behavior embedding
-        b_z = self.tanh(pre_tanh_b_z)
+        if self._tanh_after_sample:
+            z_mu = self.tanh(z_mu)
+            z = self.tanh(z)
+            b_z_mu = self.tanh(b_z_mu)
+            b_z = self.tanh(b_z)
         # print(f"z.shape: {z.shape}, b_z.shape: {b_z.shape}")
         
         
@@ -1569,7 +1578,7 @@ class VAE(torch.nn.Module):
 
         decoder_time = time.time() - t
 
-        return z_outputs, b_z_outputs, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z
+        return z_outputs, b_z_outputs, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z, z_mu, b_z_mu
 
 
 
@@ -1855,7 +1864,7 @@ class ProgramVAE(nn.Module):
         init_states = s_h[:, :, 0, :, :, :].unsqueeze(2)
         # print(f"init_states.shape: {init_states.shape}")
         if self.vae.decoder.setup == 'supervised':
-            z_output, b_z_output, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z = self.vae(programs, program_masks, self.teacher_enforcing, deterministic=deterministic, a_h = a_h, s_h = s_h, a_h_len = a_h_len, s_h_len = s_h_len)
+            z_output, b_z_output, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z, z_mu, b_z_mu = self.vae(programs, program_masks, self.teacher_enforcing, deterministic=deterministic, a_h = a_h, s_h = s_h, a_h_len = a_h_len, s_h_len = s_h_len)
             _, z_pred_programs, z_pred_programs_len, _, z_output_logits, z_eop_pred_programs, z_eop_output_logits, z_pred_program_masks, _ = z_output
             _, b_z_pred_programs, b_z_pred_programs_len, _, b_z_output_logits, b_z_eop_pred_programs, b_z_eop_output_logits, b_z_pred_program_masks, _ = b_z_output
             _, _, _, z_action_logits, z_action_masks, _ = self.condition_policy(init_states, a_h, z, self.teacher_enforcing,
@@ -1873,6 +1882,7 @@ class ProgramVAE(nn.Module):
                 'action_masks': z_action_masks,
                 'pre_tanh': pre_tanh_z,
                 'z': z,
+                'z_mu': z_mu,
             }
 
             b_z_output = {
@@ -1886,6 +1896,7 @@ class ProgramVAE(nn.Module):
                 'action_masks': b_z_action_masks,
                 'pre_tanh': pre_tanh_b_z,
                 'z': b_z,
+                'z_mu': b_z_mu,
             }
 
             return z_output, b_z_output, encoder_time, decoder_time
