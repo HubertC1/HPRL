@@ -87,6 +87,12 @@ class KarelStateGenerator(object):
         s[:, :, 5] = 1 - (np.sum(s[:, :, 6:], axis=-1) > 0) > 0
         assert np.sum(s[:, :, 5:]) == h*w, np.sum(s[:, :, :5])
         marker_weight = np.reshape(np.array(range(3)), (1, 1, 3))
+        
+        # s=[h of grid, w of grid, c: # of channels (karel's orientation, walls, markers)]
+        # y=row of karel's init pos
+        # x=col of karel's init pos
+        # np.sum(s[:, :, 4])= # of walls
+        # np.sum(marker_weight*s[:, :, 5:])= # of markers
         return s, y, x, np.sum(s[:, :, 4]), np.sum(marker_weight*s[:, :, 5:])
 
     # generate an initial env
@@ -960,8 +966,54 @@ def generator(config):
         grp['a_h'] = demos_a_h
         seen_programs.add(random_code)
         # progress bar
+        # count += 1
+        # if count % (num_total / 100) == 0:
+        #     bar.update(count / (num_total / 100))
+        #     grp = f.create_group('data_info_{}'.format(count))
+        #     grp['max_demo_length'] = max_demo_length_in_dataset
+        #     grp['min_demo_length'] = min_demo_length_in_dataset
+        #     grp['dsl_type'] = 'prob'
+        #     grp['max_program_length'] = max_program_length_in_dataset
+        #     grp['min_program_length'] = min_program_length_in_dataset
+        #     grp['num_program_tokens'] = len(dsl.int2token)
+        #     grp['num_demo_per_program'] = config.num_demo_per_program
+        #     grp['num_action_tokens'] = len(dsl.action_functions)
+        #     grp['num_train'] = config.num_train
+        #     grp['num_test'] = config.num_test
+        #     grp['num_val'] = config.num_val
+        #     f.close()
+        #     id_file.close()
+        #     log.info('Dataset generated under {} with {} samples'.format(dir_name, count))
+        #     if count < num_total:
+        #         # create new file
+        #         f = h5py.File(os.path.join(dir_name, 'data_{}.hdf5'.format(count)), 'w')
+        #         id_file = open(os.path.join(dir_name, 'id_{}.txt'.format(count)), 'w')
         count += 1
-        if count % (num_total / 100) == 0:
+        if num_total == 10000:
+            # For small datasets (10,000 programs), no need to split files
+            # Just update the progress bar
+            if count % 100 == 0:  # Update progress every 100 programs
+                bar.update(count / 100)
+                
+            # Save metadata at the end
+            if count == num_total:
+                grp = f.create_group('data_info')
+                grp['max_demo_length'] = max_demo_length_in_dataset
+                grp['min_demo_length'] = min_demo_length_in_dataset
+                grp['dsl_type'] = 'prob'
+                grp['max_program_length'] = max_program_length_in_dataset
+                grp['min_program_length'] = min_program_length_in_dataset
+                grp['num_program_tokens'] = len(dsl.int2token)
+                grp['num_demo_per_program'] = config.num_demo_per_program
+                grp['num_action_tokens'] = len(dsl.action_functions)
+                grp['num_train'] = config.num_train
+                grp['num_test'] = config.num_test
+                grp['num_val'] = config.num_val
+                f.close()
+                id_file.close()
+                log.info('Dataset generated under {} with {} samples'.format(dir_name, count))
+        elif count % (num_total / 100) == 0:
+            # Original file splitting code for larger datasets
             bar.update(count / (num_total / 100))
             grp = f.create_group('data_info_{}'.format(count))
             grp['max_demo_length'] = max_demo_length_in_dataset
@@ -1003,9 +1055,13 @@ def main():
                         help='height of square grid world')
     parser.add_argument('--width', type=int, default=8,
                         help='width of square grid world')
-    parser.add_argument('--num_train', type=int, default=800000, help='num train')
-    parser.add_argument('--num_test',  type=int, default=100000,  help='num test')
-    parser.add_argument('--num_val',   type=int, default=100000,  help='num val')
+    # parser.add_argument('--num_train', type=int, default=800000, help='num train')
+    # parser.add_argument('--num_test',  type=int, default=100000,  help='num test')
+    # parser.add_argument('--num_val',   type=int, default=100000,  help='num val')
+    
+    parser.add_argument('--num_train', type=int, default=8000, help='num train')
+    parser.add_argument('--num_test',  type=int, default=1000,  help='num test')
+    parser.add_argument('--num_val',   type=int, default=1000,  help='num val')
     parser.add_argument('--wall_prob', type=float, default=0.15,
                         help='probability of wall generation')
     parser.add_argument('--seed', type=int, default=123, help='seed')
@@ -1019,7 +1075,7 @@ def main():
                         help='min demo length')
     parser.add_argument('--max_demo_length', type=int, default=50,
                         help='max demo length')
-    parser.add_argument('--num_demo_per_program', type=int, default=10,
+    parser.add_argument('--num_demo_per_program', type=int, default=50,
                         help='number of seen demonstrations')
     parser.add_argument('--max_demo_generation_trial', type=int, default=100)
     parser.add_argument('--cover_all_branches_in_demos', type=bool, default=True, help='cover all conditional branches while generating demonstrations')

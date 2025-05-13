@@ -97,9 +97,10 @@ class DSLBase(object):
     def p_error(self, p):
         raise RuntimeError('Syntax Error')
 
+    # expand the code from start_token
+    # random_tokens defined in dsl_prob_option_v2.py
     def random_code(self, start_token="prog", depth=0, max_depth=6, nesting_depth=0, max_nesting_depth=4):
         code = " ".join(self.random_tokens(start_token, depth, max_depth, nesting_depth, max_nesting_depth))
-
         return code
 
     def parse(self, code, **kwargs):
