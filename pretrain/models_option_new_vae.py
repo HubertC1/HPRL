@@ -1372,6 +1372,8 @@ class VAE(torch.nn.Module):
         self._tanh_after_sample   = kwargs['net']['tanh_after_sample']
         self._latent_std_mu       = kwargs['net']['latent_std_mu']
         self._latent_std_sigma    = kwargs['net']['latent_std_sigma']
+        self._bz_latent_std_mu = kwargs['net']['bz_latent_std_mu']
+        self._bz_latent_std_sigma = kwargs['net']['bz_latent_std_sigma']
         self._latent_mean_pooling = kwargs['net']['latent_mean_pooling']
         self._use_latent_dist     = not kwargs['net']['controller']['use_decoder_dist']
         self._rnn_type            = kwargs['net']['rnn_type']
@@ -1439,6 +1441,8 @@ class VAE(torch.nn.Module):
                                     unit_size=kwargs['net']['num_rnn_decoder_units'], **kwargs)
         self._enc_mu = torch.nn.Linear(kwargs['num_lstm_cell_units'], kwargs['num_lstm_cell_units'])
         self._enc_log_sigma = torch.nn.Linear(kwargs['num_lstm_cell_units'], kwargs['num_lstm_cell_units'])
+        self._bz_enc_mu = torch.nn.Linear(kwargs['num_lstm_cell_units'], kwargs['num_lstm_cell_units'])
+        self._bz_enc_log_sigma = torch.nn.Linear(kwargs['num_lstm_cell_units'], kwargs['num_lstm_cell_units'])
         self.tanh = torch.nn.Tanh()
 
     @property
@@ -1462,6 +1466,22 @@ class VAE(torch.nn.Module):
         self.z_sigma = sigma
 
         return mu + sigma * Variable(std_z, requires_grad=False)  # Reparameterization trick
+
+    def _sample_latent_bz(self, h_enc):
+        """
+        Return the latent normal sample b_z ~ N(mu, sigma^2)
+        """
+        mu = self._bz_enc_mu(h_enc)
+        log_sigma = self._bz_enc_log_sigma(h_enc)
+        sigma = torch.exp(log_sigma)
+        std_bz = torch.from_numpy(np.random.normal(self._bz_latent_std_mu, self._bz_latent_std_sigma, size=sigma.size())).to(torch.float).to(h_enc.device)
+        if self._tanh_after_mu_sigma: #False by default
+            mu = self.tanh(mu)
+            sigma = self.tanh(sigma)
+        self.b_z_mean = mu
+        self.b_z_sigma = sigma
+        return mu + sigma * Variable(std_bz, requires_grad=False)  # Reparameterization trick
+
 
     @staticmethod
     def latent_loss(z_mean, z_stddev):
@@ -1530,7 +1550,7 @@ class VAE(torch.nn.Module):
         if self._tanh_after_sample:
             z = self.tanh(z)
 
-        pre_tanh_b_z = self.behavior_encoder(s_h, a_h, s_h_len, a_h_len) #pretanh behavior embedding
+        pre_tanh_b_z = self._sample_latent_bz(self.behavior_encoder(s_h, a_h, s_h_len, a_h_len)) #pretanh behavior embedding
         b_z = self.tanh(pre_tanh_b_z)
         # print(f"z.shape: {z.shape}, b_z.shape: {b_z.shape}")
         

@@ -27,6 +27,8 @@ config = {
         'dropout': 0.0,                             # dropout rate for recurrent unit
         'latent_std_mu': 0.0,                       # latent mu for program embedding distribution
         'latent_std_sigma': 0.1,                    # latent sigma for program embedding distribution
+        'bz_latent_std_mu': 0.0,                        # bz mu for behavior embedding distribution
+        'bz_latent_std_sigma': 0.1,                     # bz sigma for behavior embedding distribution
         'latent_mean_pooling': False,                # mean pooling over hn in each time step 
         'decoder': {
             'use_teacher_enforcing': True,          # teacher enforcing while SL training
@@ -360,7 +362,7 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': ['l2', 'cosine'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
+            'contrastive_loss': ['clip', 'cosine'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
             'latent': False,
             'z_condition': True,
             'b_z_condition': True,
@@ -369,5 +371,6 @@ config = {
     },
     'normalize_latent': False,
     'use_bz_scalar': False,
-    'freeze_p2p': True,
+    'freeze_p2p': False,
+    'finetune_decoder': True,
 }
