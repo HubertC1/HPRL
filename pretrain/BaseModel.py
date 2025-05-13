@@ -77,6 +77,9 @@ class BaseModel(object):
 
         self.program_frozen = False
         self.start_decoder_finetune = False
+        self.gen_program_dir = os.path.join(self.config['outdir'], 'generated_programs')
+        if not os.path.exists(self.gen_program_dir):
+            os.makedirs(self.gen_program_dir)
 
     # FIXME: implement gradien clipping
     def setup_optimizer(self, parameters):
@@ -176,16 +179,16 @@ class BaseModel(object):
             
             # Log the averaged metrics (all as flat keys)
             wandb.log(avg_metrics, step=global_step)
-            program_txt_path = os.path.join(self.config['outdir'], f'decoded_vs_gt_{epoch}.txt')
+            program_txt_path = os.path.join(self.gen_program_dir, f'decoded_vs_gt_{epoch}.txt')
             with open(program_txt_path, 'a') as f:
                 for i in range(len(batch_info['gt_programs'])):
                     gt_str = self.dsl.intseq2str(batch_info['gt_programs'][i])
-                    z_pred_str = self.dsl.intseq2str(batch_info['z_pred_programs'][i])
-                    b_z_pred_str = self.dsl.intseq2str(batch_info['b_z_pred_programs'][i])
+                    z_pred_str = batch_info['z_generated_programs'][i]
+                    b_z_pred_str = batch_info['b_z_generated_programs'][i]
                     f.write(f"truth : {gt_str}\n")
                     f.write(f"z_pred: {z_pred_str}\n")
                     f.write(f"bz_pre: {b_z_pred_str}\n\n")
-            
+            wandb.save(program_txt_path)
             # Clear the metrics for next evaluation
             self.eval_metrics.clear()
 
