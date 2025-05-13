@@ -182,9 +182,9 @@ class BaseModel(object):
                     gt_str = self.dsl.intseq2str(batch_info['gt_programs'][i])
                     z_pred_str = self.dsl.intseq2str(batch_info['z_pred_programs'][i])
                     b_z_pred_str = self.dsl.intseq2str(batch_info['b_z_pred_programs'][i])
-                    f.write(f"GT : {gt_str}\n")
+                    f.write(f"truth : {gt_str}\n")
                     f.write(f"z_pred: {z_pred_str}\n")
-                    f.write(f"b_z: {b_z_pred_str}\n\n")
+                    f.write(f"bz_pre: {b_z_pred_str}\n\n")
             
             # Clear the metrics for next evaluation
             self.eval_metrics.clear()
