@@ -243,6 +243,10 @@ class SupervisedModel(BaseModel):
                     'loss/clip': [],
                     'loss/clip_accuracy': [],
                     'loss/contrastive': [],
+                    'loss/mse': [],
+                    'loss/cosine': [],
+                    'loss/l2': [],
+                    'loss/l3': [],
                     'z_vs_b/decoder_token_accuracy/z': [],
                     'z_vs_b/decoder_token_accuracy/b_z': [],
                     'z_vs_b/decoder_program_accuracy/z': [],
@@ -395,7 +399,10 @@ class SupervisedModel(BaseModel):
                 f'{mode}/loss/clip': clip_loss.item(),
                 f'{mode}/loss/clip_accuracy': clip_acc.item(),
                 f'{mode}/loss/contrastive': hinge_loss.item(),
-
+                f'{mode}/loss/mse': mse_loss.item(),
+                f'{mode}/loss/cosine': cosine_sim_loss.item(),
+                f'{mode}/loss/l2': l2_loss.item(),
+                f'{mode}/loss/l3': l3_loss.item(),
                 f'{mode}/z_vs_b/decoder_token_accuracy': {
                     'z': z_t_accuracy.item(),
                     'b_z': b_z_t_accuracy.item()
@@ -415,7 +422,7 @@ class SupervisedModel(BaseModel):
                 f'{mode}/z_vs_b/z_norm_mean': zbz_analysis['z_norm'].item(),
                 f'{mode}/z_vs_b/bz_norm_mean': zbz_analysis['bz_norm'].item(),
                 f'{mode}/z_vs_b/norm_ratio': zbz_analysis['scale_ratio'].item(),
-                f'{mode}/z_vs_b/z_bz_angle': zbz_analysis['angle_deg'].item(),
+                f'{mode}/z_vs_b/z_bz_angle': zbz_analysis['angle_deg'],
             }, step=self.global_train_step)
             
         elif mode == "eval":
@@ -429,6 +436,11 @@ class SupervisedModel(BaseModel):
             self.eval_metrics['loss/clip'].append(clip_loss.item())
             self.eval_metrics['loss/clip_accuracy'].append(clip_acc.item())
             self.eval_metrics['loss/contrastive'].append(hinge_loss.item())
+            self.eval_metrics['loss/mse'].append(mse_loss.item())
+            self.eval_metrics['loss/cosine'].append(cosine_sim_loss.item())
+            self.eval_metrics['loss/l2'].append(l2_loss.item())
+            self.eval_metrics['loss/l3'].append(l3_loss.item())
+
             
             self.eval_metrics['z_vs_b/decoder_token_accuracy/z'].append(z_t_accuracy.item())
             self.eval_metrics['z_vs_b/decoder_token_accuracy/b_z'].append(b_z_t_accuracy.item())
@@ -483,6 +495,10 @@ class SupervisedModel(BaseModel):
             'b_z_condition_loss': b_z_condition_loss.detach().cpu().numpy().item(),
             'clip_loss': clip_loss.detach().cpu().numpy().item(),
             'contrastive_loss': hinge_loss.detach().cpu().numpy().item(),
+            'mse_loss': mse_loss.detach().cpu().numpy().item(),
+            'cosine_loss': cosine_sim_loss.detach().cpu().numpy().item(),
+            'l2_loss': l2_loss.detach().cpu().numpy().item(),
+            'l3_loss': l3_loss.detach().cpu().numpy().item(),
             'gt_programs': programs.detach().cpu().numpy(),
             'z_pred_programs': z_pred_programs.detach().cpu().numpy(),
             'b_z_pred_programs': b_z_pred_programs.detach().cpu().numpy(),
@@ -496,7 +512,7 @@ class SupervisedModel(BaseModel):
             'bz_norm': zbz_analysis['bz_norm'].detach().cpu().numpy().item(),
             'z_norm': zbz_analysis['z_norm'].detach().cpu().numpy().item(),
             'scale_ratio': zbz_analysis['scale_ratio'].detach().cpu().numpy().item(),
-            'angle_deg': zbz_analysis['angle_deg'].detach().cpu().numpy().item(),
+            'angle_deg': zbz_analysis['angle_deg'],
             }
 
         return batch_info

@@ -224,7 +224,7 @@ class BaseModel(object):
             # produce print-out
             if self.verbose:
                 self._print_record_dict(record_dict_eval, 'validation', time.time() - t)
-            if self.config['freeze_p2p'] and not self.program_freeze and record_dict_eval['z_decoder_greedy_token_accuracy'] > 80:
+            if self.config['freeze_p2p'] and not self.program_frozen and record_dict_eval['mean_z_decoder_greedy_token_accuracy'] > 80:
                 self.logger.info(f"Freezing program encoder and decoder at epoch {epoch}")
                 dfs_freeze(self.net)
                 for param in self.net.vae.behavior_encoder.parameters():
