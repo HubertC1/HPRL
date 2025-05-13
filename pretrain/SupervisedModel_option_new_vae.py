@@ -182,8 +182,9 @@ class SupervisedModel(BaseModel):
         with torch.no_grad():
             # greedy rollout of decoder
             greedy_outputs = self.net.vae.decoder(programs, z, teacher_enforcing=False, deterministic=True)
-            _, _, _, _, greedy_output_logits, _, _, pred_program_masks, _ = greedy_outputs
-
+            _, z_generated_programs, _, _, greedy_output_logits, _, _, pred_program_masks, _ = greedy_outputs
+            # print(f"z_generated_programs: {z_generated_programs}")
+            z_generated_programs_str = [self.dsl.intseq2str(prg) for prg in z_generated_programs]
             """ calculate accuracy """
             logits = greedy_output_logits.view(-1, greedy_output_logits.shape[-1])
             pred_mask = pred_program_masks.view(-1, 1)
@@ -204,7 +205,7 @@ class SupervisedModel(BaseModel):
                 generated_outputs = self.net.vae.decoder(None, rand_z, teacher_enforcing=False, deterministic=True)
                 generated_programs = [self.dsl.intseq2str(prg) for prg in generated_outputs[1]]
 
-        return (greedy_t_accuracy, greedy_p_accuracy, greedy_a_accuracy, greedy_d_accuracy), generated_programs, logits
+        return (greedy_t_accuracy, greedy_p_accuracy, greedy_a_accuracy, greedy_d_accuracy), z_generated_programs_str, logits
 
 
     def _run_batch(self, batch, mode='train'):
