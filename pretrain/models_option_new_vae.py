@@ -117,6 +117,15 @@ class ActionBehaviorEncoder(NNBase):
             init_(nn.Conv2d(self.state_shape[0], 32, 3, stride=1)), nn.ReLU(),
             init_(nn.Conv2d(32, 32, 3, stride=1)), nn.ReLU(), Flatten(),
             init_(nn.Linear(32 * 4 * 4, hidden_size)), nn.ReLU())
+
+        # 4) Checkpoint
+        def rnn_forward(packed_input):
+            if self.rnn_type.upper() == 'GRU':
+                return self.gru(packed_input)
+            elif self.rnn_type.upper() == 'LSTM':
+                return self.lstm(packed_input)
+            
+        self.rnn_forward = rnn_forward
         
         self.state_projector = nn.Linear(hidden_size, unit_size)
 
@@ -160,9 +169,9 @@ class ActionBehaviorEncoder(NNBase):
         )
 
         if self.rnn_type.upper() == 'GRU':
-            packed_outputs, rnn_hxs = self.gru(packed_s_a)
+            packed_outputs, rnn_hxs = checkpoint(self.rnn_forward, packed_s_a)
         else:
-            packed_outputs, (h_n, c_n) = self.lstm(packed_s_a)
+            packed_outputs, (h_n, c_n) = checkpoint(self.rnn_forward, packed_s_a)
             rnn_hxs = h_n
 
         final_hidden = rnn_hxs[-1]  # [B*R, unit_size]
@@ -488,7 +497,11 @@ class ProgramEncoder(NNBase):
         self._two_head = two_head
         self.token_encoder = nn.Embedding(num_inputs, num_inputs)
         self._use_linear = use_linear
-        
+
+        def rnn_forward(packed_input):
+            return self.gru(packed_input)
+        self.rnn_forward = rnn_forward
+
         # Add Linear Layer to compress latent
         if self._use_linear:
             self.fc = nn.Linear(unit_size, hidden_size)
@@ -499,8 +512,10 @@ class ProgramEncoder(NNBase):
         packed_embedded = pack_padded_sequence(program_embeddings, src_len, batch_first=True,
                                                             enforce_sorted=False)
 
+
         if self.is_recurrent:
-            x, rnn_hxs = self.gru(packed_embedded)
+            # x, rnn_hxs = self.gru(packed_embedded)
+            x, rnn_hxs = checkpoint(self.rnn_forward, packed_embedded)
         
         # Add Linear Layer to compress latent
         if self._use_linear:
@@ -538,6 +553,11 @@ class Decoder(NNBase):
         self.token_output_layer = nn.Sequential(
             init_(nn.Linear(unit_size + num_inputs + unit_size, unit_size)), nn.Tanh(),
             init_(nn.Linear(unit_size, num_outputs)))
+        
+        def rnn_step(inputs, rnn_hxs, masks):
+            return self._forward_rnn(inputs, rnn_hxs, masks.view(-1, 1))
+            
+        self.rnn_step = rnn_step
 
         # This check is required only to support backward compatibility to pre-trained models
         if (self.setup =='RL' or self.setup =='supervisedRL') and kwargs['rl']['algo']['name'] != 'reinforce':
@@ -588,9 +608,10 @@ class Decoder(NNBase):
     def _forward_one_pass(self, current_tokens, context, rnn_hxs, masks):
         token_embedding = self.token_encoder(current_tokens)
         inputs = torch.cat((token_embedding, context), dim=-1)
-
+        
         if self.is_recurrent:
-            outputs, rnn_hxs = self._forward_rnn(inputs, rnn_hxs, masks.view(-1, 1))
+            # outputs, rnn_hxs = self._forward_rnn(inputs, rnn_hxs, masks.view(-1, 1))
+            outputs, rnn_hxs = checkpoint(self.rnn_step, inputs, rnn_hxs, masks)
 
         pre_output = torch.cat([outputs, token_embedding, context], dim=1)
         output_logits = self.token_output_layer(pre_output)

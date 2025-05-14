@@ -362,7 +362,7 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': ['clip', 'cosine'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
+            'contrastive_loss': ['mse', 'cosine'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
             'latent': False,
             'z_condition': True,
             'b_z_condition': True,
