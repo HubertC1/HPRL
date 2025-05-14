@@ -1050,7 +1050,7 @@ def check_path(path):
 def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--dir_name', type=str, default='karel_dataset_option_L40_1m_cover_branch')
+    parser.add_argument('--dir_name', type=str, default='thirty')
     parser.add_argument('--height', type=int, default=8,
                         help='height of square grid world')
     parser.add_argument('--width', type=int, default=8,
@@ -1075,7 +1075,7 @@ def main():
                         help='min demo length')
     parser.add_argument('--max_demo_length', type=int, default=50,
                         help='max demo length')
-    parser.add_argument('--num_demo_per_program', type=int, default=50,
+    parser.add_argument('--num_demo_per_program', type=int, default=30,
                         help='number of seen demonstrations')
     parser.add_argument('--max_demo_generation_trial', type=int, default=100)
     parser.add_argument('--cover_all_branches_in_demos', type=bool, default=True, help='cover all conditional branches while generating demonstrations')
