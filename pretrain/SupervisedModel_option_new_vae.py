@@ -518,10 +518,10 @@ class SupervisedModel(BaseModel):
             'behavior_vectors': b_z.detach().cpu().numpy().tolist(),
             'encoder_time': encoder_time,
             'decoder_time': decoder_time,
-            'bz_norm': zbz_analysis['bz_norm'].detach().cpu().numpy().item(),
-            'z_norm': zbz_analysis['z_norm'].detach().cpu().numpy().item(),
-            'scale_ratio': zbz_analysis['scale_ratio'].detach().cpu().numpy().item(),
-            'angle_deg': zbz_analysis['angle_deg'],
+            'zbz_bz_norm': zbz_analysis['bz_norm'].detach().cpu().numpy().item(),
+            'zbz_z_norm': zbz_analysis['z_norm'].detach().cpu().numpy().item(),
+            'zbz_scale_ratio': zbz_analysis['scale_ratio'].detach().cpu().numpy().item(),
+            'zbz_angle_deg': zbz_analysis['angle_deg'],
             }
 
         return batch_info

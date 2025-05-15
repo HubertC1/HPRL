@@ -141,6 +141,12 @@ class BaseModel(object):
                     if self.writer is not None:
                         self.writer.add_scalar('{}_{}/batch_{}'.format(mode, vtype, key), val,
                                            epoch * num_batches + batch_idx)
+                if 'zbz' in key:
+                    batch_info_list[key].append(val)
+                    vtype = 'zbz'
+                    if self.writer is not None:
+                        self.writer.add_scalar('{}_{}/batch_{}'.format(mode, vtype, key), val,
+                                           epoch * num_batches + batch_idx)
 
             # log programs
             batch_gt_programs.append(batch_info['gt_programs'])
@@ -207,6 +213,12 @@ class BaseModel(object):
                 epoch_info['mean_'+key] = np.mean(np.array(val).flatten())
                 if self.writer is not None:
                     self.writer.add_scalar('{}_{}/epoch_{}'.format(mode, vtype, key), epoch_info['mean_'+key], epoch)
+            if 'zbz' in key:
+                vtype = 'zbz'
+                epoch_info['mean_'+key] = np.mean(np.array(val).flatten())
+                if self.writer is not None:
+                    self.writer.add_scalar('{}_{}/epoch_{}'.format(mode, vtype, key), epoch_info['mean_'+key], epoch)
+
         return epoch_info, optinal_epoch_info
 
     def run_one_epoch(self, epoch, best_valid_epoch, best_valid_loss, tr_loader, val_loader, *args, **kwargs):
@@ -244,6 +256,21 @@ class BaseModel(object):
                     param.requires_grad = True
                 self.net.vae.behavior_encoder.train()
                 self.program_frozen = True
+                # Also re-initialize the optimizer to exclude frozen parameters
+                self.setup_optimizer(self.net.parameters())
+            
+            # print(f"record mean andgle: {record_dict_eval['mean_zbz_angle_deg']}")
+            # print(f"record mean scale ratio: {record_dict_eval['mean_zbz_scale_ratio']}")
+            if self.config['finetune_decoder'] and not self.start_decoder_finetune and record_dict_eval['mean_z_decoder_greedy_token_accuracy'] > 80\
+                and record_dict_eval['mean_zbz_angle_deg'] < 15 and record_dict_eval['mean_zbz_scale_ratio'] < 1.1 and record_dict_eval['mean_zbz_scale_ratio'] > 0.9:
+            # if self.config['finetune_decoder'] and not self.start_decoder_finetune:    
+                self.logger.info(f"Finetuning decoder at epoch {epoch}")
+                # print("Finetuning decoder at epoch {}".format(epoch))
+                dfs_freeze(self.net)
+                for param in self.net.vae.decoder.parameters():
+                    param.requires_grad = True
+                self.net.vae.decoder.train()
+                self.start_decoder_finetune = True
                 # Also re-initialize the optimizer to exclude frozen parameters
                 self.setup_optimizer(self.net.parameters())
 

@@ -11,7 +11,7 @@ logging.getLogger('matplotlib.font_manager').disabled = True
 
 
 def analyze_z_bz(z, bz, save_path="pca_z_bz.png"):
-    print("GOOGOOGOO!!!~~~~")
+    # print("GOOGOOGOO!!!~~~~")
     if not isinstance(z, torch.Tensor):
         z_tensor = torch.tensor(z, dtype=torch.float32)
         bz_tensor = torch.tensor(bz, dtype=torch.float32)
