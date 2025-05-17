@@ -23,8 +23,19 @@ import numpy as np
 MASTER_SEED = 12345                       # ≤ change once per experiment
 rng = np.random.RandomState(MASTER_SEED)
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--task", type=str, default="Harvester", help="Task name for the Karel environment")
+args = parser.parse_args()
+
+task_name = args.task
+
 # task_name = "StairClimber"
-task_name = "Maze"
+# task_name = "Maze"
+# task_name = "DoorKey"
+# task_name = "Harvester"
+
 
 env_args = {
     "env_height": 8,
@@ -124,5 +135,5 @@ if __name__ == "__main__":
         device="auto",
     )
 
-    model.learn(total_timesteps=2_000_000, callback=eval_callback)
-    model.save("ppo_karel_stairclimber_testing")
+    model.learn(total_timesteps=10_000_000, callback=eval_callback)
+    model.save(f"/home/hubertchang/HPRL/expert_ckpt/ppo_karel_{task_name}")
