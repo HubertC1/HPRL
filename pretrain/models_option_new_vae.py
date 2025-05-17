@@ -104,7 +104,7 @@ class ActionBehaviorEncoder(NNBase):
         self._use_linear = use_linear
         self.unit_size = unit_size
         self.state_shape = (kwargs['input_channel'], kwargs['input_height'], kwargs['input_width'])
-        self.fuse_s_0 = kwargs['fuse_s_0']
+        self.encode_method = kwargs['encode_method']
         # 1) Action embedding: each action ID → (unit_size)
         self.action_encoder = nn.Embedding(num_actions, unit_size)
 
@@ -125,34 +125,50 @@ class ActionBehaviorEncoder(NNBase):
     def forward(self, s_h, a_h, s_h_len, a_h_len):
         """
         :param 
-            s_h: shape (B, R, 1, C, H, W), initial state of the environment.
+            s_h: shape (B, R, T, C, H, W), initial state of the environment.
             a_h: shape (B, R, T), each entry is an action ID.
         :return: shape (B, R, out_dim), where out_dim = hidden_size or unit_size
         """
-
-        # Extract initial state image
-        s_0 = s_h[:, :, 0, :, :, :]  # (B, R, C, H, W)
-        B, R, C, H, W = s_0.shape
-        B_rolled = B * R
-
-        new_s0 = s_0.view(B_rolled, C, H, W)
-        state_embeddings = self.state_encoder(new_s0)  # [B*R, hidden_size]
-        state_embed = self.state_projector(state_embeddings)  # [B*R, unit_size]
-
         # Action sequence processing
         B, R, T = a_h.shape
+        B_rolled = B * R
         a_h_flat = a_h.view(B_rolled, T).long()
         a_h_len_flat = a_h_len.view(B_rolled)
 
         embedded_actions = self.action_encoder(a_h_flat)  # [B*R, T, unit_size]
 
-        if self.fuse_s_0:
+        # Extract initial state image
+        s_0 = s_h[:, :, 0, :, :, :]  # (B, R, C, H, W)
+        B, R, C, H, W = s_0.shape
+        T += 1 #state has T+1 time steps
+        BRT = B * R * T 
+
+        s_0 = s_0.view(B_rolled, C, H, W)
+        s0_embed = self.state_encoder(s_0)  # [B*R, hidden_size]
+        s0_embed = self.state_projector(s0_embed)  # [B*R, unit_size]
+
+        flat_sh = s_h.view(BRT, C, H, W)  # [B*R*T, C, H, W]
+        s_embed = self.state_encoder(flat_sh)  # [B*R*T, hidden_size]
+        s_embed = self.state_projector(s_embed)  # [B*R*T, unit_size]
+        s_embed = s_embed.view(B_rolled, T, self.unit_size)  # [B*R, T, unit_size]
+
+        
+
+        if self.encode_method == 'fuse_s0':
             embedded_s_a = embedded_actions  # no s_0 prepended
             embedded_lengths = a_h_len_flat
-        else:
-            projected_s_0 = state_embed.unsqueeze(1)  # [B*R, 1, unit_size]
+        elif self.encode_method == 'prepend_s0':
+            projected_s_0 = s0_embed.unsqueeze(1)  # [B*R, 1, unit_size]
             embedded_s_a = torch.cat((projected_s_0, embedded_actions), dim=1)
             embedded_lengths = a_h_len_flat + 1
+        elif self.encode_method == 'sasa':
+            # interleave s_embed and embedded_actions
+            embedded_s_a = torch.zeros(B_rolled, 2*T-1, self.unit_size, device=s_embed.device)
+            embedded_s_a[:, 0::2, :] = s_embed
+            embedded_s_a[:, 1::2, :] = embedded_actions
+            embedded_lengths = a_h_len_flat * 2 + 1
+
+
 
         # Pack and RNN
         packed_s_a = nn.utils.rnn.pack_padded_sequence(
@@ -167,9 +183,9 @@ class ActionBehaviorEncoder(NNBase):
 
         final_hidden = rnn_hxs[-1]  # [B*R, unit_size]
         # Fuse with s_0 after RNN if enabled
-        if self.fuse_s_0:
+        if self.encode_method == 'fuse_s0':
             # You can either add or concat — here we concat and project
-            fused = final_hidden + state_embed  # [B*R, unit_size]
+            fused = final_hidden + s0_embed  # [B*R, unit_size]
             final_hidden = fused
 
         # Optional projection
@@ -217,7 +233,7 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         )
         
         # Get transformer parameters from kwargs with defaults
-        self.fuse_s_0 = kwargs['fuse_s_0']
+        self.fuse_s_0 = (kwargs['encode_method'] == 'fuse_s0')
         self.num_layers = kwargs['net']['transformer_layers']
         self.num_heads = kwargs['net']['transformer_heads']
         self.causal_attn = kwargs.get('causal_attention', True)

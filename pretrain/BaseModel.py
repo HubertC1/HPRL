@@ -188,12 +188,19 @@ class BaseModel(object):
             program_txt_path = os.path.join(self.gen_program_dir, f'decoded_vs_gt_{epoch}.txt')
             with open(program_txt_path, 'a') as f:
                 for i in range(len(batch_info['gt_programs'])):
+                    z = torch.tensor(batch_info['latent_vectors'][i])
+                    bz = torch.tensor(batch_info['behavior_vectors'][i])
                     gt_str = self.dsl.intseq2str(batch_info['gt_programs'][i])
                     z_pred_str = batch_info['z_generated_programs'][i]
                     b_z_pred_str = batch_info['b_z_generated_programs'][i]
                     f.write(f"truth : {gt_str}\n")
                     f.write(f"z_pred: {z_pred_str}\n")
-                    f.write(f"bz_pre: {b_z_pred_str}\n\n")
+                    f.write(f"bz_pre: {b_z_pred_str}\n")
+                    f.write(f"cosine similarity: {torch.nn.functional.cosine_similarity(z, bz, dim=0).item()}\n")
+                    f.write(f"mse: {torch.nn.functional.mse_loss(z, bz).item()}\n")
+                    f.write(f"norm_ratio: {torch.norm(z-bz).item()}\n\n")
+
+
             wandb.save(program_txt_path)
             # Clear the metrics for next evaluation
             self.eval_metrics.clear()
