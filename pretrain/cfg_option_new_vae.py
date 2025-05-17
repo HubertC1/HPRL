@@ -129,7 +129,7 @@ config = {
     },
     'dsl': {
         'use_simplified_dsl': False,                # reducing valid tokens from 50 to 31
-        'max_program_len': 12, #45,                 # maximum program length
+        'max_program_len': 45, #45,                 # maximum program length
         'grammar': 'handwritten',                   # grammar type: [None, 'handwritten']
     },
     'rl':{
@@ -321,7 +321,7 @@ config = {
     'env_task': 'program',                          # VAE: program,  meta-policy: cleanHouse, harvester, fourCorners, randomMaze, stairClimber, topOff
     'reward_diff': True,                            # If True, differnce between rewards of two consecutive states will be considered at each env step, otherwise current environment reward will be considered
     'prefix': 'default',                            # output directory prefix
-    'max_program_len': 12, #45,                     # maximum program length  (repeated)
+    'max_program_len': 45, #45,                     # maximum program length  (repeated)
     'mapping_file': None,                           # mapping_karel2prl.txt if using simplified DSL (Ignore of intention space)
     'debug': False,                                 # use this to debug RL code (provides a lot of debug data in form of dict)
     'input_height': 8,                              # height of state image
@@ -349,7 +349,7 @@ config = {
     'final_reward_scale': False,
 
     'behavior_representation': 'action_sequence',    # 'state_sequence', 'action_sequence'
-    'fuse_s_0': True,                               # 'True', fuse s_0 with a_h embedding after RNN. 'False': concatenate s_0 with a_h then RNN
+    'encode_method': 'fuse_s0',                        #'prepend_s0', 'fuse_s0', 'sasa'                    
     'loss': {
         'latent_loss_coef': 1.0,                    # coefficient of latent loss (beta) in VAE during SL training
         'condition_loss_coef': 1.0,                 # coefficient of condition policy loss during SL training
@@ -362,8 +362,8 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': ['clip', 'cosine'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
-            'latent': False,
+            'contrastive_loss': ['clip', 'mse'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
+            'latent': True,
             'z_condition': True,
             'b_z_condition': True,
         },
@@ -372,5 +372,5 @@ config = {
     'normalize_latent': False,
     'use_bz_scalar': False,
     'freeze_p2p': False,
-    'finetune_decoder': True,
+    'finetune_decoder': False,
 }
