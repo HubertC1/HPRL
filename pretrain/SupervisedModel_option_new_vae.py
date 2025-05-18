@@ -34,7 +34,6 @@ class SupervisedModel(BaseModel):
         super(SupervisedModel, self).__init__(ProgramVAE, *args, **kwargs)
         self._two_head = self.config['two_head']
         self.max_demo_length = self.config['max_demo_length']
-        self.latent_loss_coef = self.config['loss']['latent_loss_coef']
         self.condition_loss_coef = self.config['loss']['condition_loss_coef']
         self._vanilla_ae = self.config['AE']
         self._disable_decoder = self.config['net']['decoder']['freeze_params']
@@ -238,7 +237,9 @@ class SupervisedModel(BaseModel):
                     'loss/total': [],
                     'loss/z_rec': [],
                     'loss/b_z_rec': [],
-                    'loss/lat': [],
+                    'loss/z_lat': [],
+                    'loss/b_z_lat': [],
+                    'loss/comb_lat': [],
                     'loss/z_condition': [],
                     'loss/b_z_condition': [],
                     'loss/clip': [],
@@ -325,13 +326,15 @@ class SupervisedModel(BaseModel):
             self.optimizer.zero_grad()
 
         zero_tensor = torch.tensor([0.0], device=self.device, requires_grad=False)
-        lat_loss, rec_loss, z_condition_loss, b_z_condition_loss = zero_tensor, zero_tensor, zero_tensor, zero_tensor
+        z_lat_loss, bz_lat_loss, comb_lat_loss, rec_loss, z_condition_loss, b_z_condition_loss = zero_tensor, zero_tensor, zero_tensor, zero_tensor, zero_tensor, zero_tensor
         z_cond_t_accuracy, z_cond_p_accuracy, b_z_cond_t_accuracy, b_z_cond_p_accuracy = zero_tensor, zero_tensor, zero_tensor, zero_tensor
         if not self._disable_decoder:
             z_rec_loss = self.loss_fn(z_logits[vae_mask.squeeze()], (targets[vae_mask.squeeze()]).view(-1))
             b_z_rec_loss = self.loss_fn(b_z_logits[vae_mask.squeeze()], (targets[vae_mask.squeeze()]).view(-1))
         if not self._vanilla_ae:
-            lat_loss = self.net.vae.latent_loss(self.net.vae.z_mean, self.net.vae.z_sigma)
+            z_lat_loss = self.net.vae.latent_loss(self.net.vae.z_mean, self.net.vae.z_sigma)
+            bz_lat_loss = self.net.vae.latent_loss(self.net.vae.b_z_mean, self.net.vae.b_z_sigma)
+            comb_lat_loss = self.net.vae.latent_loss(self.net.vae.z_mean, self.net.vae.b_z_mean)
         if not self._disable_condition:
             z_condition_loss, z_cond_t_accuracy, z_cond_p_accuracy = self._get_condition_loss(a_h, a_h_len, z_action_logits,
                                                                                         z_action_masks)
@@ -366,8 +369,11 @@ class SupervisedModel(BaseModel):
                 loss += l2_loss
             if 'l3' in cfg_losses.get('contrastive_loss', []):
                 loss += l3_loss
-            if cfg_losses.get('latent', False):
-                loss += self.config['loss']['latent_loss_coef'] * lat_loss
+            if cfg_losses.get('latent', False) != "none":
+                if cfg_losses.get('z_latent', False) == 'separate':
+                    loss += self.config['loss']['z_latent_loss_coef'] * z_lat_loss + self.config['loss']['bz_latent_loss_coef'] * bz_lat_loss
+                elif cfg_losses.get('z_latent', False) == 'combined':
+                    loss += self.config['loss']['z_latent_loss_coef'] * comb_lat_loss
             if cfg_losses.get('z_condition', False):
                 loss += self.config['loss']['condition_loss_coef'] * z_condition_loss
             if cfg_losses.get('b_z_condition', False):
@@ -402,7 +408,9 @@ class SupervisedModel(BaseModel):
                 f'{mode}/loss/total': loss.item(),
                 f'{mode}/loss/z_rec': z_rec_loss.item(),
                 f'{mode}/loss/b_z_rec': b_z_rec_loss.item(),
-                f'{mode}/loss/lat': lat_loss.item(),
+                f'{mode}/loss/z_lat': z_lat_loss.item(),
+                f'{mode}/loss/b_z_lat':bz_lat_loss.item(),
+                f'{mode}/loss/comb_lat': comb_lat_loss.item(),
                 f'{mode}/loss/z_condition': z_condition_loss.item(),
                 f'{mode}/loss/b_z_condition': b_z_condition_loss.item(),
                 f'{mode}/loss/clip': clip_loss.item(),
@@ -439,7 +447,9 @@ class SupervisedModel(BaseModel):
             self.eval_metrics['loss/total'].append(loss.item())
             self.eval_metrics['loss/z_rec'].append(z_rec_loss.item())
             self.eval_metrics['loss/b_z_rec'].append(b_z_rec_loss.item())
-            self.eval_metrics['loss/lat'].append(lat_loss.item())
+            self.eval_metrics['loss/z_lat'].append(z_lat_loss.item())
+            self.eval_metrics['loss/b_z_lat'].append(bz_lat_loss.item())
+            self.eval_metrics['loss/comb_lat'].append(comb_lat_loss.item())
             self.eval_metrics['loss/z_condition'].append(z_condition_loss.item())
             self.eval_metrics['loss/b_z_condition'].append(b_z_condition_loss.item())
             self.eval_metrics['loss/clip'].append(clip_loss.item())
@@ -499,7 +509,9 @@ class SupervisedModel(BaseModel):
             'total_loss': loss.detach().cpu().numpy().item(),
             'z_rec_loss': z_rec_loss.detach().cpu().numpy().item(),
             'b_z_rec_loss': b_z_rec_loss.detach().cpu().numpy().item(),
-            'lat_loss': lat_loss.detach().cpu().numpy().item(),
+            'z_lat_loss': z_lat_loss.detach().cpu().numpy().item(),
+            'b_z_lat_loss': bz_lat_loss.detach().cpu().numpy().item(),
+            'comb_lat_loss': comb_lat_loss.detach().cpu().numpy().item(),
             'z_condition_loss': z_condition_loss.detach().cpu().numpy().item(),
             'b_z_condition_loss': b_z_condition_loss.detach().cpu().numpy().item(),
             'clip_loss': clip_loss.detach().cpu().numpy().item(),
