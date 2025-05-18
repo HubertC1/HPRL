@@ -39,8 +39,8 @@ config = {
         'num_rnn_decoder_units': 256,
         'use_transformer_encoder': False,
         'use_transformer_decoder': False,
-        'use_transformer_encoder_behavior': False,   # use transformer for behavior encoding instead of RNN
-        'use_transformer_decoder_behavior': False,   # use transformer for behavior encoding instead of RNN
+        'use_transformer_encoder_behavior': True,   # use transformer for behavior encoding instead of RNN
+        'use_transformer_decoder_behavior': True,   # use transformer for behavior encoding instead of RNN
         'transformer_layers': 2,                    # number of transformer layers for behavior encoder
         'transformer_heads': 2,                     # number of attention heads for behavior encoder
         'transformer': {                            # transformer unit setting
@@ -349,9 +349,10 @@ config = {
     'final_reward_scale': False,
 
     'behavior_representation': 'action_sequence',    # 'state_sequence', 'action_sequence'
-    'encode_method': 'fuse_s0',                        #'prepend_s0', 'fuse_s0', 'sasa'                    
+    'encode_method': 'concat_sasa',                        #'prepend_s0', 'fuse_s0', 'sasa', 'concat_sasa'                    
     'loss': {
-        'latent_loss_coef': 1.0,                    # coefficient of latent loss (beta) in VAE during SL training
+        'z_latent_loss_coef': 1,                    # coefficient of latent loss (beta) in VAE during SL training
+        'bz_latent_loss_coef': 1,                   # coefficient of bz latent loss (beta) in VAE during SL training
         'condition_loss_coef': 1.0,                 # coefficient of condition policy loss during SL training
         'b_z_rec_loss_coef': 1.0,                # coefficient of b_z_rec loss in VAE during SL training
         'z_rec_loss_coef': 1.0,                    # coefficient of z_rec loss in VAE during SL training
@@ -362,8 +363,8 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': ['clip', 'mse'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
-            'latent': True,
+            'contrastive_loss': ['mse', 'cosine'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
+            'latent': 'separate',                  # 'combined', 'separate', 'none'   
             'z_condition': True,
             'b_z_condition': True,
         },
