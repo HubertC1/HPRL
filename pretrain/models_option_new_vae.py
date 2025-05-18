@@ -241,6 +241,10 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         # end-of-sentence
         self.eos_token = nn.Parameter(torch.zeros(1, 1, unit_size))
         nn.init.normal_(self.eos_token, std=0.02)
+
+        # separator token between rollouts
+        self.sep_token = nn.Parameter(torch.zeros(1, 1, unit_size))
+        nn.init.normal_(self.sep_token, std=0.02)
         
         # Layer norm before transformer
         self.pre_transformer_ln = nn.LayerNorm(unit_size)
@@ -292,15 +296,108 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         a_h_len_flat = a_h_len.view(B_rolled)
 
         embedded_actions = self.action_encoder(a_h_flat)  # [B*R, T, unit_size]
+
+        T += 1 
+        BRT = B * R * T
+        flat_sh = s_h.view(BRT, C, H, W)  # [B*R*T, C, H, W]
+        s_embed = self.state_encoder(flat_sh)  # [B*R*T, hidden_size]
+        s_embed = self.state_projector(s_embed)  # [B*R*T, unit_size]
+        s_embed = s_embed.view(B_rolled, T, self.unit_size)  # [B*R, T, unit_size]
         
         # Handle state fusion
-        if self.fuse_s_0:
+        if self.encode_method == 'fuse_s0':
             # Add +1 to make room for EOS token in all cases
             seq_len_T = T + 1
             # Create input with extra position for EOS
             transformer_input = torch.zeros(B_rolled, seq_len_T, self.unit_size, device=device)
             transformer_input[:, :T, :] = embedded_actions  # Place actions in first T positions
             seq_lengths = a_h_len_flat
+        elif self.encode_method == 'concat_sasa':
+            B, R, T = a_h.shape
+            B_rolled = B * R
+            device = s_embed.device
+            unit_size = self.unit_size
+            T += 1
+
+            # Interleave S A S A ... to get (B*R, 2T-1, unit_size)
+            embedded_s_a = torch.zeros(B_rolled, 2*T - 1, unit_size, device=device)
+            embedded_s_a[:, 0::2, :] = s_embed
+            embedded_s_a[:, 1::2, :] = embedded_actions
+
+            # Actual lengths per rollout
+            rollout_lengths = a_h_len_flat * 2 + 1  # shape: (B*R,)
+            rollout_chunks = []
+            batch_sep_token = self.sep_token.squeeze(0).squeeze(0)  # [unit_size]
+            batch_eos_token = self.eos_token.squeeze(0).squeeze(0)  # [unit_size]
+
+            max_seq_len = 0
+            batch_sequences = []
+
+            for b in range(B):
+                # collect R rollouts for batch b
+                rollout_seq = []
+                total_len = 0
+                for r in range(R):
+                    idx = b * R + r
+                    r_len = rollout_lengths[idx].item()
+                    sas = embedded_s_a[idx, :r_len, :]  # (r_len, unit_size)
+                    rollout_seq.append(sas)
+                    total_len += r_len
+                    if r != R - 1:
+                        # Add sep_token between rollouts
+                        rollout_seq.append(batch_sep_token.unsqueeze(0))  # (1, unit_size)
+                        total_len += 1
+                # After all rollouts, add EOS token
+                rollout_seq.append(batch_eos_token.unsqueeze(0))  # (1, unit_size)
+                total_len += 1
+
+                full_seq = torch.cat(rollout_seq, dim=0)  # (total_len, unit_size)
+                max_seq_len = max(max_seq_len, total_len)
+                batch_sequences.append(full_seq)
+
+            # Pad to max_seq_len
+            transformer_input = torch.zeros(B, max_seq_len, unit_size, device=device)
+            padding_mask = torch.ones(B, max_seq_len, dtype=torch.bool, device=device)  # default all padding
+
+            for b, seq in enumerate(batch_sequences):
+                L = seq.shape[0]
+                transformer_input[b, :L, :] = seq
+                padding_mask[b, :L] = False  # not padding
+
+            # Apply layer norm
+            transformer_input = self.pre_transformer_ln(transformer_input)
+
+            # Generate causal mask if needed
+            causal_mask = None
+            if self.causal_attn:
+                causal_mask = torch.triu(torch.full((max_seq_len, max_seq_len), float('-inf'), device=device), diagonal=1)
+
+            # Use transformer with checkpointing
+            transformer_output = checkpoint(
+                self.transformer_encoder,
+                transformer_input,
+                causal_mask,
+                padding_mask,
+                self.causal_attn
+            )
+
+            # Layer norm again
+            transformer_output = self.final_ln(transformer_output)
+
+            # Grab embedding at EOS position (last non-padding token in each seq)
+            eos_embeddings = []
+            for b in range(B):
+                eos_pos = (~padding_mask[b]).nonzero(as_tuple=False).max().item()
+                eos_embeddings.append(transformer_output[b, eos_pos])
+
+            final_hidden = torch.stack(eos_embeddings, dim=0)  # (B, unit_size)
+
+
+            if self._use_linear:
+                final_hidden = self.proj(final_hidden)
+
+            return final_hidden  # shape (B, hidden_size or unit_size)
+
         else:
              # Prepend s_0 to action sequence, add +1 for EOS
             seq_len_T = T + 2  # +1 for s_0, +1 for EOS
@@ -377,6 +474,8 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         behavior_embedding = final_hidden.mean(dim=1)
         
         return behavior_embedding
+
+
 
 
 class StateBehaviorEncoder(NNBase):
