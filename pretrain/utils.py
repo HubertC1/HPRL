@@ -82,3 +82,129 @@ def analyze_z_bz(z, bz, save_path="pca_z_bz.png"):
 
         # 'pca_components': reduced
     }
+
+# import torch
+# import torch.nn.functional as F
+
+# def convert_to_POMDP(s_h):
+#     """
+#     Extract 3x3 local grid centered on Karel for each state.
+    
+#     Input:
+#         s_h: [R, T, C=8, H=8, W=8]
+#     Output:
+#         [R, T, C=8, 3, 3]
+#     """
+#     R, T, C, H, W = s_h.shape
+#     assert (H, W, C) == (8, 8, 8), "Expected shape [R, T, 8, 8, 8] in CHW layout"
+
+#     # Pad spatial dimensions by 1 for safe 3x3 extraction
+#     s_h_padded = F.pad(s_h, pad=(1, 1, 1, 1))  # [R, T, C, 10, 10]
+
+#     # Find Karel position per [R, T] — only one per frame in channels 0–3
+#     karel_mask = s_h[:, :, 0:4, :, :].sum(dim=2)  # [R, T, H, W]
+#     karel_mask_flat = karel_mask.view(R * T, -1)
+#     karel_indices = karel_mask_flat.argmax(dim=1)  # [R*T]
+#     y = (karel_indices // W + 1).long()  # +1 due to padding
+#     x = (karel_indices % W + 1).long()
+#     print(f"y: {y}, x: {x}")
+
+#     # Use unfold to efficiently extract 3x3 patches from s_h_padded
+#     patches = F.unfold(
+#         s_h_padded.view(R * T, C, 10, 10), kernel_size=3, padding=0
+#     )  # [R*T, C*3*3, L], where L=64 (sliding over all 8x8 positions)
+
+#     # Find the linear index into 8x8 grid for each Karel location
+#     unfold_idx = (y - 1) * 8 + (x - 1)  # subtract 1 because unfold slides on original 8x8
+
+#     # Gather relevant patches
+#     idx = unfold_idx.view(-1, 1).expand(-1, C * 3 * 3)  # [R*T, C*9]
+#     selected = patches.gather(dim=2, index=idx.unsqueeze(-1)).squeeze(-1)  # [R*T, C*9]
+
+#     # Reshape back to [R, T, C, 3, 3]
+#     result = selected.view(R, T, C, 3, 3)
+#     return result
+
+
+
+
+import torch
+import torch.nn.functional as F
+
+def convert_to_POMDP(s_h: torch.Tensor) -> torch.Tensor:
+    """
+    Extract a 3×3×8 local observation centred on Karel.
+
+    Parameters
+    ----------
+    s_h : torch.Tensor
+        Shape [R, T, 8, 8, 8]  (rollouts, timesteps, channels, height, width).
+
+    Returns
+    -------
+    torch.Tensor
+        Shape [R, T, 8, 3, 3]  with Karel at (1,1) of every 3×3 patch.
+    """
+    R, T, C, H, W = s_h.shape
+    assert (H, W, C) == (8, 8, 8), "Expected [R, T, 8, 8, 8]"
+
+    # --- 1) pad the spatial dims so crops at the border are valid -----------
+    s_h_pad = F.pad(s_h, pad=(1, 1, 1, 1))        # → [R, T, 8, 10, 10]
+
+    # --- 2) locate Karel in every frame (sum over facing-direction channels)
+    karel_mask = s_h[:, :, 0:4].sum(dim=2)         # [R, T, 8, 8]  (0/1 values)
+    flat_idx    = karel_mask.view(R, T, -1).argmax(-1)   # [R, T] linear index 0-63
+    y_idx, x_idx = flat_idx // 8, flat_idx % 8            # 0-based in 8×8 map
+    y_idx, x_idx = y_idx + 1, x_idx + 1                   # shift for the padding
+
+    # --- 3) gather the 3×3 patches ------------------------------------------------
+    out = torch.zeros(R, T, C, 3, 3, device=s_h.device, dtype=s_h.dtype)
+
+    for r in range(R):
+        for t in range(T):
+            y, x = y_idx[r, t].item(), x_idx[r, t].item()
+            out[r, t] = s_h_pad[r, t, :, y-1:y+2, x-1:x+2]   # (C,3,3)
+
+    return out
+
+import numpy as np
+
+def convert_to_POMDP_np(s_h: np.ndarray):
+    """
+    Robustly extract 3×3×8 patches centred on Karel.
+
+    Parameters
+    ----------
+    s_h : np.ndarray
+        Shape (R, T, 8, 8, 8).
+
+    Returns
+    -------
+    patches : np.ndarray
+        Shape (R, T, 8, 3, 3).
+    centred_ok : np.ndarray
+        Boolean mask (R, T) – True where Karel was uniquely centred.
+    """
+    R, T, C, H, W = s_h.shape
+    assert (H, W, C) == (8, 8, 8)
+
+    # 1) pad 1 cell all round (zeros)
+    s_pad = np.pad(s_h, ((0,0),(0,0),(0,0),(1,1),(1,1)),
+                   mode='constant', constant_values=0)  # (R,T,8,10,10)
+
+    patches     = np.zeros((R, T, 8, 3, 3), dtype=s_h.dtype)
+    centred_ok  = np.zeros((R, T),          dtype=bool)
+
+    # 2) loop is still plenty fast for 10×18
+    for r in range(R):
+        for t in range(T):
+            # orientation channels 0-3
+            orient = s_h[r, t, 0:4]                   # (4,8,8)
+            yy, xx = np.where(orient.sum(0) == 1)     # positions with a single flag
+            if len(yy) == 1:                          # exactly one Karel
+                y, x = int(yy[0] + 1), int(xx[0] + 1) # shift for padding
+                patches[r, t] = s_pad[r, t, :, y-1:y+2, x-1:x+2]
+                centred_ok[r, t] = True
+            # else: leave the patch zeros (indicates invalid / end-of-rollout)
+
+    return patches, centred_ok
