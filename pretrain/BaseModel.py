@@ -198,9 +198,7 @@ class BaseModel(object):
                     f.write(f"bz_pre: {b_z_pred_str}\n")
                     f.write(f"cosine similarity: {torch.nn.functional.cosine_similarity(z, bz, dim=0).item()}\n")
                     f.write(f"mse: {torch.nn.functional.mse_loss(z, bz).item()}\n")
-                    f.write(f"norm_ratio: {torch.norm(z-bz).item()}\n\n")
-
-
+                    f.write(f"norm_ratio: {torch.norm(z)/torch.norm(bz)}\n\n")
             wandb.save(program_txt_path)
             # Clear the metrics for next evaluation
             self.eval_metrics.clear()
@@ -265,6 +263,9 @@ class BaseModel(object):
                 self.program_frozen = True
                 # Also re-initialize the optimizer to exclude frozen parameters
                 self.setup_optimizer(self.net.parameters())
+            if self.config['stop_teacher_enforcing'] and self.net.teacher_enforcing and record_dict_eval['mean_z_decoder_greedy_token_accuracy'] > 10:
+                self.logger.info(f"Stop teacher enforcing at epoch {epoch}")
+                self.net.teacher_enforcing = False
             
             # print(f"record mean andgle: {record_dict_eval['mean_zbz_angle_deg']}")
             # print(f"record mean scale ratio: {record_dict_eval['mean_zbz_scale_ratio']}")
