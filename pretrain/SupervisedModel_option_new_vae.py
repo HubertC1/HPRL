@@ -192,7 +192,7 @@ class SupervisedModel(BaseModel):
                 batch_shape = greedy_output_logits.shape[:-1]
                 greedy_t_accuracy, greedy_p_accuracy = calculate_accuracy(logits, targets, vae_mask, batch_shape)
 
-            init_states = s_h[:, :, 0, :, :, :].unsqueeze(2)
+            init_states = s_h[0][:, :, 0, :, :, :].unsqueeze(2)
             _, _, _, action_logits, action_masks, _ = self.net.condition_policy(init_states, a_h, z, teacher_enforcing=False, deterministic=True)
             _, greedy_a_accuracy, greedy_d_accuracy = self._get_condition_loss(a_h, a_h_len, action_logits,
                                                                                action_masks)
@@ -427,6 +427,10 @@ class SupervisedModel(BaseModel):
                 f'{mode}/z_vs_b/decoder_program_accuracy': {
                     'z': z_p_accuracy.item(),
                     'b_z': b_z_p_accuracy.item()
+                },
+                f'{mode}/z_vs_b/decoder_greedy_token_accuracy': {
+                    'z': z_greedy_t_accuracy.item(),
+                    'b_z': b_z_greedy_t_accuracy.item()
                 },
                 f'{mode}/z_vs_b/condition_action_accuracy': {
                     'z': z_cond_t_accuracy.item(),

@@ -41,12 +41,12 @@ config = {
         'use_transformer_decoder': False,
         'use_transformer_encoder_behavior': True,   # use transformer for behavior encoding instead of RNN
         'use_transformer_decoder_behavior': True,   # use transformer for behavior encoding instead of RNN
-        'transformer_layers': 2,                    # number of transformer layers for behavior encoder
-        'transformer_heads': 2,                     # number of attention heads for behavior encoder
+        'transformer_layers': 4,                    # number of transformer layers for behavior encoder
+        'transformer_heads': 4,                     # number of attention heads for behavior encoder
         'transformer': {                            # transformer unit setting
-            'd_word_vec': 32,                       # dimension of word embedding
-            'd_k': 4,
-            'd_v': 4,
+            'd_word_vec': 128,                       # dimension of word embedding
+            'd_k': 32,
+            'd_v': 32,
             'n_layers': 3,
             'n_head': 4,
             'd_inner': 512,                         # inner unit size for ffn
@@ -351,8 +351,8 @@ config = {
     'behavior_representation': 'action_sequence',    # 'state_sequence', 'action_sequence'
     'encode_method': 'concat_sasa',                        #'prepend_s0', 'fuse_s0', 'sasa', 'concat_sasa'                    
     'loss': {
-        'z_latent_loss_coef': 1,                    # coefficient of latent loss (beta) in VAE during SL training
-        'bz_latent_loss_coef': 1,                   # coefficient of bz latent loss (beta) in VAE during SL training
+        'z_latent_loss_coef': 1.0,                    # coefficient of latent loss (beta) in VAE during SL training
+        'bz_latent_loss_coef': 1.0,                   # coefficient of bz latent loss (beta) in VAE during SL training
         'condition_loss_coef': 1.0,                 # coefficient of condition policy loss during SL training
         'b_z_rec_loss_coef': 1.0,                # coefficient of b_z_rec loss in VAE during SL training
         'z_rec_loss_coef': 1.0,                    # coefficient of z_rec loss in VAE during SL training
@@ -363,7 +363,7 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': ['mse', 'cosine'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
+            'contrastive_loss': ['clip'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
             'latent': 'separate',                  # 'combined', 'separate', 'none'   
             'z_condition': True,
             'b_z_condition': True,
@@ -374,4 +374,6 @@ config = {
     'use_bz_scalar': False,
     'freeze_p2p': False,
     'finetune_decoder': False,
+    'POMDP' : True,
+    'stop_teacher_enforcing': True,            # stop teacher enforcing after certain number of epochs
 }

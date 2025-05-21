@@ -120,6 +120,9 @@ class ActionBehaviorEncoder(NNBase):
         
         self.state_projector = nn.Linear(hidden_size, unit_size)
 
+        # project 72 to 64
+        self.POMDP_state_projector = nn.Linear(72, unit_size)
+
 
 
     def forward(self, s_h, a_h, s_h_len, a_h_len):
@@ -270,6 +273,8 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         if use_linear:
             self.proj = nn.Linear(unit_size, hidden_size)
 
+        self.POMDP = kwargs['POMDP']
+
     def forward(self, s_h, a_h, s_h_len, a_h_len):
         """
         Encode a sequence of actions using a causal transformer with EOS token.
@@ -287,21 +292,26 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         device = s_h.device
 
         new_s0 = s_0.view(B_rolled, C, H, W)
-        state_embeddings = self.state_encoder(new_s0)  # [B*R, hidden_size]
-        state_embed = self.state_projector(state_embeddings)  # [B*R, unit_size]
-
+        if not self.POMDP:
+            state_embeddings = self.state_encoder(new_s0)  # [B*R, hidden_size]
+            state_embed = self.state_projector(state_embeddings)  # [B*R, unit_size]
         # Action sequence processing
         B, R, T = a_h.shape
         a_h_flat = a_h.view(B_rolled, T).long()
         a_h_len_flat = a_h_len.view(B_rolled)
+
 
         embedded_actions = self.action_encoder(a_h_flat)  # [B*R, T, unit_size]
 
         T += 1 
         BRT = B * R * T
         flat_sh = s_h.view(BRT, C, H, W)  # [B*R*T, C, H, W]
-        s_embed = self.state_encoder(flat_sh)  # [B*R*T, hidden_size]
-        s_embed = self.state_projector(s_embed)  # [B*R*T, unit_size]
+        if not self.POMDP:
+            s_embed = self.state_encoder(flat_sh)  # [B*R*T, hidden_size]
+            s_embed = self.state_projector(s_embed)  # [B*R*T, unit_size]
+        else:
+            flat_sh = flat_sh.view(BRT, C*H*W)  # [B*R*T, 72]
+            s_embed = self.POMDP_state_projector(flat_sh)
         s_embed = s_embed.view(B_rolled, T, self.unit_size)  # [B*R, T, unit_size]
         
         # Handle state fusion
@@ -1972,14 +1982,16 @@ class ProgramVAE(nn.Module):
     def is_recurrent(self):
         return self.vae.program_encoder.is_recurrent
 
-    def forward(self, programs, program_masks, s_h, a_h, s_h_len, a_h_len, rnn_hxs=None, masks=None, action=None, output_mask_all=None, eop_action=None,
+    def forward(self, programs, program_masks, s_h_list, a_h, s_h_len, a_h_len, rnn_hxs=None, masks=None, action=None, output_mask_all=None, eop_action=None,
                 agent_actions=None, agent_action_masks=None, deterministic=False, evaluate=False):
         #print(f"a_h.shape: {a_h.shape}")
         #print(f"s_h.shape: {init_states.shape}")
+        s_h = s_h_list[0]
+        s_h_partial = s_h_list[1]
         init_states = s_h[:, :, 0, :, :, :].unsqueeze(2)
         # print(f"init_states.shape: {init_states.shape}")
         if self.vae.decoder.setup == 'supervised':
-            z_output, b_z_output, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z, z_mu, b_z_mu = self.vae(programs, program_masks, self.teacher_enforcing, deterministic=deterministic, a_h = a_h, s_h = s_h, a_h_len = a_h_len, s_h_len = s_h_len)
+            z_output, b_z_output, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z, z_mu, b_z_mu = self.vae(programs, program_masks, self.teacher_enforcing, deterministic=deterministic, a_h = a_h, s_h = s_h_partial, a_h_len = a_h_len, s_h_len = s_h_len)
             _, z_pred_programs, z_pred_programs_len, _, z_output_logits, z_eop_pred_programs, z_eop_output_logits, z_pred_program_masks, _ = z_output
             _, b_z_pred_programs, b_z_pred_programs_len, _, b_z_output_logits, b_z_eop_pred_programs, b_z_eop_output_logits, b_z_pred_program_masks, _ = b_z_output
             _, _, _, z_action_logits, z_action_masks, _ = self.condition_policy(init_states, a_h, z, self.teacher_enforcing,
