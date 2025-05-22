@@ -24,7 +24,7 @@ config = {
         'saved_params_path': None,                  # path to load saved weights in a loaded network
         'saved_sup_params_path': None,              # path to load saved weights from supervised training
         'rnn_type': 'GRU',                          # recurrent unit type
-        'dropout': 0.0,                             # dropout rate for recurrent unit
+        'dropout': 0.1,                             # dropout rate for recurrent unit
         'latent_std_mu': 0.0,                       # latent mu for program embedding distribution
         'latent_std_sigma': 0.1,                    # latent sigma for program embedding distribution
         'bz_latent_std_mu': 0.0,                        # bz mu for behavior embedding distribution
@@ -41,8 +41,10 @@ config = {
         'use_transformer_decoder': False,
         'use_transformer_encoder_behavior': True,   # use transformer for behavior encoding instead of RNN
         'use_transformer_decoder_behavior': True,   # use transformer for behavior encoding instead of RNN
-        'transformer_layers': 4,                    # number of transformer layers for behavior encoder
-        'transformer_heads': 4,                     # number of attention heads for behavior encoder
+        'transformer_layers': 2,                    # number of transformer layers for behavior encoder
+        'transformer_heads': 2,                     # number of attention heads for behavior encoder
+        'transformer_decoder_layers': 4,
+        'transformer_decoder_heads': 4,
         'transformer': {                            # transformer unit setting
             'd_word_vec': 128,                       # dimension of word embedding
             'd_k': 32,
@@ -84,15 +86,19 @@ config = {
     'seed': 123,
 
     'optimizer': {
-        'name': 'adam',
+        'name': 'adamw',
         'params': {
-            'lr': 5e-4,
+            'lr': 3e-4,
+            'weight_decay': 1e-2,
+            'betas': (0.9, 0.999),
         },
         'scheduler': {
-            'step_size': 10,                        # Period of learning rate decay
-            'gamma': .95,                           # Multiplicative factor of learning rate decay
+            'name' : 'cosine',
+            'T_max': 50,          # epochs to one full cosine cycle
+            'eta_min': 1e-6,      # min LR
         }
     },
+
 
     # config to control training
     'train': {
@@ -100,7 +106,7 @@ config = {
             'to_tensor': True,
             'use_pickled': True
         },
-        'batch_size': 256,
+        'batch_size': 64,
         'shuffle': True,
         'max_epoch': 100,
     },
@@ -110,7 +116,7 @@ config = {
             'to_tensor': True,
             'use_pickled': True
         },
-        'batch_size': 256,
+        'batch_size': 64,
         'shuffle': True,
         'debug_samples': [3, 37, 54],               # sample ids to generate plots for (None, int, list)
     },
@@ -120,7 +126,7 @@ config = {
             'to_tensor': True,
             'use_pickled': True
         },
-        'batch_size': 256,
+        'batch_size': 64,
         'shuffle': True,
     },
     # config to control evaluation
@@ -363,7 +369,7 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': ['clip'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
+            'contrastive_loss': ['clip', 'mse'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
             'latent': 'separate',                  # 'combined', 'separate', 'none'   
             'z_condition': True,
             'b_z_condition': True,
@@ -374,6 +380,6 @@ config = {
     'use_bz_scalar': False,
     'freeze_p2p': False,
     'finetune_decoder': False,
-    'POMDP' : True,
-    'stop_teacher_enforcing': True,            # stop teacher enforcing after certain number of epochs
+    'POMDP' : False,
+    'stop_teacher_enforcing': False,            # stop teacher enforcing after certain number of epochs
 }
