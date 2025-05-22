@@ -18,10 +18,19 @@ optim_list = {
     'adagrad': torch.optim.Adagrad,
     'adadelta': torch.optim.Adadelta,
     'adam': torch.optim.Adam,
+    'adamw': torch.optim.AdamW,
     'adamax': torch.optim.Adamax,
     'rmsprop': torch.optim.RMSprop,
 }
 
+scheduler_list = {
+    'steplr'        : lr_scheduler.StepLR,
+    'multistep'     : lr_scheduler.MultiStepLR,
+    'exponential'   : lr_scheduler.ExponentialLR,
+    'cosine'        : lr_scheduler.CosineAnnealingLR,
+    'cosine_restart': lr_scheduler.CosineAnnealingWarmRestarts,
+    'plateau'       : lr_scheduler.ReduceLROnPlateau,
+}
 
 def dfs_freeze(model):
     model.eval()  # disable dropout, batchnorm updates, etc.
@@ -53,7 +62,11 @@ class BaseModel(object):
         # Load parameters if available
         ckpt_path = config['net']['saved_params_path']
         if ckpt_path is not None:
-            self.load_net(ckpt_path)
+            try:
+                self.load_checkpoint(ckpt_path)
+                self.logger.debug('Checkpoint loaded from {}'.format(ckpt_path))
+            except:
+                self.load_net(ckpt_path)
 
         # disable some parts of network if don't want to train them
         if config['net']['decoder']['freeze_params']:
@@ -83,21 +96,37 @@ class BaseModel(object):
 
     # FIXME: implement gradien clipping
     def setup_optimizer(self, parameters):
-        self.optimizer = None
-        if 'optimizer' in self.config:
-            optim = optim_list[self.config['optimizer']['name']]
-            self.optimizer = optim(filter(lambda p: p.requires_grad, parameters), **self.config['optimizer']['params'])
+        cfg = self.config.get('optimizer', {})
+        opt_cls = optim_list[cfg['name'].lower()]
+        self.optimizer = opt_cls(
+            filter(lambda p: p.requires_grad, parameters),
+            **cfg.get('params', {})
+        )
 
     def setup_lr_scheduler(self):
         self.scheduler = None
-        if self.config['optimizer'].get('scheduler'):
-            self.scheduler = lr_scheduler.StepLR(self.optimizer, **self.config['optimizer']['scheduler'])
-            self.logger.debug('Using LR scheduler: '+ str(self.config['optimizer']['scheduler']))
+        sched_cfg = self.config['optimizer'].get('scheduler')
+        if sched_cfg:
+            cfg = sched_cfg.copy()              # don’t mutate original
+            sched_name = cfg.pop('name', 'steplr').lower()
+            sched_cls  = scheduler_list[sched_name]
+            self.scheduler = sched_cls(self.optimizer, **cfg)
+            self.logger.debug(f'Using LR scheduler {sched_name}: {cfg}')
 
-    def step_lr_scheduler(self):
-        if self.scheduler:
+    def step_lr_scheduler(self, metric: float = None):
+        if not self.scheduler:
+            return
+        # ReduceLROnPlateau needs the monitored metric; others don’t.
+        if isinstance(self.scheduler, lr_scheduler.ReduceLROnPlateau):
+            self.scheduler.step(metric)
+        else:
             self.scheduler.step()
-            self.logger.debug("Learning rate: %s" % (','.join([str(lr) for lr in self.scheduler.get_lr()])))
+        try:
+            lrs = self.scheduler.get_last_lr()
+        except AttributeError:                  # fallback for old Torch
+            lrs = [g['lr'] for g in self.optimizer.param_groups]
+        self.logger.debug('Learning rate: ' + ', '.join(map(str, lrs)))
+
 
     def _add_program_latent_vectors(self, optional_record_dict, optional_record_dict_eval, type='best'):
         self.global_logs['info']['logs']['validation'][type + '_program_latent_vectors'] = optional_record_dict_eval[
@@ -286,8 +315,14 @@ class BaseModel(object):
                 best_valid_epoch = epoch
                 best_valid_loss = record_dict_eval['mean_total_loss']
                 self._add_program_latent_vectors(optional_record_dict, optional_record_dict_eval, type='best')
-                self.save_net(
-                    os.path.abspath(os.path.join(self.config['outdir'], 'best_valid_params.ptp'.format(epoch))))
+                try:
+                    self.save_checkpoint(
+                        os.path.abspath(os.path.join(self.config['outdir'], 'best_valid_params.ptp'.format(epoch))))
+                    self.logger.info(f"saved checkpoints to {os.path.abspath(os.path.join(self.config['outdir'], 'best_valid_params.ptp'.format(epoch)))}")
+                except:
+                    self.save_net(
+                        os.path.abspath(os.path.join(self.config['outdir'], 'best_valid_params.ptp'.format(epoch))))
+                
 
             if np.isnan(record_dict_eval['mean_total_loss']):
                 self.logger.debug(self.verbose, 'Early Stopping because validation loss is nan')
@@ -298,7 +333,11 @@ class BaseModel(object):
 
         # Save net
         self._add_program_latent_vectors(optional_record_dict, optional_record_dict_eval, type='final')
-        self.save_net(os.path.join(self.config['outdir'], 'final_params.ptp'))
+        try:
+            self.save_checkpoint(os.path.join(self.config['outdir'], 'final_params.ptp'))
+            self.logger.info(f"saved checkpoints to {os.path.join(self.config['outdir'], 'final_params.ptp')}")
+        except:
+            self.save_net(os.path.join(self.config['outdir'], 'final_params.ptp'))
 
         # Save results
         pickle.dump(self.global_logs, file=open(os.path.join(self.config['outdir'], self.config['record_file']), 'wb'))
@@ -347,6 +386,58 @@ class BaseModel(object):
         pickle.dump(self.global_logs, file=open(
             os.path.join(self.config['outdir'], self.config['record_file'].replace('.pkl', '_eval.pkl')), 'wb'))
 
+# --- add these imports near the top -------------
+    from typing import Optional, Dict
+    def save_checkpoint(
+        self,
+        filename: str,
+        extra_payload: Optional[Dict] = None,
+    ):
+        """
+        Stores model, optimizer, scheduler and VecNormalize statistics.
+        """
+        checkpoint = {
+            "net_state_dict": self.net.state_dict(),
+            "ob_rms": getattr(get_vec_normalize(self.envs), "ob_rms", None),
+            "optimizer_state_dict": self.optimizer.state_dict()
+                if self.optimizer is not None else None,
+            "scheduler_state_dict": self.scheduler.state_dict()
+                if self.scheduler is not None else None,
+            "epoch": self.epoch,
+        }
+        if extra_payload:
+            checkpoint.update(extra_payload)
+
+        torch.save(checkpoint, filename)
+        self.logger.debug(f"Checkpoint saved to {filename}")
+
+    def load_checkpoint(self, filename: str, strict: bool = False):
+        """
+        Restores model, optimizer and scheduler states (if they exist in the file).
+        Call *after* optimizer / scheduler have been created.
+        """
+        self.logger.debug(f"Loading checkpoint from {filename}")
+        ckpt = torch.load(filename, map_location=self.device)
+
+        # — network weights —
+        self.net.load_state_dict(ckpt["net_state_dict"], strict=strict)
+
+        # — vec-normalize running stats —
+        if ckpt.get("ob_rms") is not None:
+            vec_norm = get_vec_normalize(self.envs)
+            if vec_norm:
+                vec_norm.ob_rms = ckpt["ob_rms"]
+
+        # — optimizer —
+        if self.optimizer is not None and ckpt.get("optimizer_state_dict"):
+            self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+
+        # — scheduler —
+        if self.scheduler is not None and ckpt.get("scheduler_state_dict"):
+            self.scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+
+        # — epoch counter (optional) —
+        self.epoch = ckpt.get("epoch", 0)
     def save_net(self, filename):
         params = [self.net.state_dict(), getattr(get_vec_normalize(self.envs), 'ob_rms', None)]
         torch.save(params, filename)
