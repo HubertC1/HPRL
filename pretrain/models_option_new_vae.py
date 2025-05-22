@@ -1021,8 +1021,8 @@ class DecoderTransformer(NNBase):
         nn.init.normal_(self.pos_encoder, std=0.02)
         
         # Transformer layers configuration
-        self.num_layers = kwargs.get('net', {}).get('transformer_layers', 6)
-        self.num_heads = kwargs.get('net', {}).get('transformer_heads', 8)
+        self.num_layers = kwargs.get('net', {}).get('transformer_decoder_layers', 6)
+        self.num_heads = kwargs.get('net', {}).get('transformer_decoder_heads', 8)
         
         # Create TransformerDecoder layer
         decoder_layer = nn.TransformerDecoderLayer(
@@ -1972,6 +1972,7 @@ class ProgramVAE(nn.Module):
         self.teacher_enforcing = kwargs['net']['decoder']['use_teacher_enforcing']
         self.vae = VAE(num_outputs, num_program_tokens, **kwargs)
         self.condition_policy = ConditionPolicy(envs, **kwargs)
+        self.POMDP = kwargs['POMDP']
 
     @property
     def recurrent_hidden_state_size(self):
@@ -1988,10 +1989,14 @@ class ProgramVAE(nn.Module):
         #print(f"s_h.shape: {init_states.shape}")
         s_h = s_h_list[0]
         s_h_partial = s_h_list[1]
+        if self.POMDP:
+            encode_sh = s_h_partial
+        else:
+            encode_sh = s_h
         init_states = s_h[:, :, 0, :, :, :].unsqueeze(2)
         # print(f"init_states.shape: {init_states.shape}")
         if self.vae.decoder.setup == 'supervised':
-            z_output, b_z_output, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z, z_mu, b_z_mu = self.vae(programs, program_masks, self.teacher_enforcing, deterministic=deterministic, a_h = a_h, s_h = s_h_partial, a_h_len = a_h_len, s_h_len = s_h_len)
+            z_output, b_z_output, z, pre_tanh_z, encoder_time, decoder_time, b_z, pre_tanh_b_z, z_mu, b_z_mu = self.vae(programs, program_masks, self.teacher_enforcing, deterministic=deterministic, a_h = a_h, s_h = encode_sh, a_h_len = a_h_len, s_h_len = s_h_len)
             _, z_pred_programs, z_pred_programs_len, _, z_output_logits, z_eop_pred_programs, z_eop_output_logits, z_pred_program_masks, _ = z_output
             _, b_z_pred_programs, b_z_pred_programs_len, _, b_z_output_logits, b_z_eop_pred_programs, b_z_eop_output_logits, b_z_pred_program_masks, _ = b_z_output
             _, _, _, z_action_logits, z_action_masks, _ = self.condition_policy(init_states, a_h, z, self.teacher_enforcing,
