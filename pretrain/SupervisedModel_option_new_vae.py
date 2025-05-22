@@ -398,7 +398,7 @@ class SupervisedModel(BaseModel):
             z_t_accuracy, z_p_accuracy = calculate_accuracy(z_logits, targets, vae_mask, batch_shape)
             b_z_t_accuracy, b_z_p_accuracy = calculate_accuracy(b_z_logits, targets, vae_mask, batch_shape)
             z_greedy_accuracies, z_generated_programs, z_glogits = self._greedy_rollout(batch, z, targets, trg_mask, mode)
-            b_z_greedy_accuracies, b_z_generated_programs, b_z_logits = self._greedy_rollout(batch, b_z, targets, trg_mask, mode)
+            b_z_greedy_accuracies, b_z_generated_programs, b_z_glogits = self._greedy_rollout(batch, b_z, targets, trg_mask, mode)
             z_greedy_t_accuracy, z_greedy_p_accuracy, z_greedy_a_accuracy, z_greedy_d_accuracy = z_greedy_accuracies
             b_z_greedy_t_accuracy, b_z_greedy_p_accuracy, b_z_greedy_a_accuracy, b_z_greedy_d_accuracy = b_z_greedy_accuracies
         
@@ -427,10 +427,6 @@ class SupervisedModel(BaseModel):
                 f'{mode}/z_vs_b/decoder_program_accuracy': {
                     'z': z_p_accuracy.item(),
                     'b_z': b_z_p_accuracy.item()
-                },
-                f'{mode}/z_vs_b/decoder_greedy_token_accuracy': {
-                    'z': z_greedy_t_accuracy.item(),
-                    'b_z': b_z_greedy_t_accuracy.item()
                 },
                 f'{mode}/z_vs_b/condition_action_accuracy': {
                     'z': z_cond_t_accuracy.item(),
