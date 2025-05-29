@@ -256,7 +256,7 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=unit_size,
             nhead=self.num_heads,
-            dim_feedforward=unit_size*2,
+            dim_feedforward=unit_size*4,
             dropout=dropout,
             activation="gelu",
             batch_first=True,
@@ -1028,7 +1028,7 @@ class DecoderTransformer(NNBase):
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=unit_size,
             nhead=self.num_heads,
-            dim_feedforward=unit_size*2,
+            dim_feedforward=unit_size*4,
             dropout=dropout,
             activation="gelu",
             batch_first=True,

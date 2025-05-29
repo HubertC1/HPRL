@@ -24,7 +24,7 @@ config = {
         'saved_params_path': None,                  # path to load saved weights in a loaded network
         'saved_sup_params_path': None,              # path to load saved weights from supervised training
         'rnn_type': 'GRU',                          # recurrent unit type
-        'dropout': 0.1,                             # dropout rate for recurrent unit
+        'dropout': 0.05,                             # dropout rate for recurrent unit
         'latent_std_mu': 0.0,                       # latent mu for program embedding distribution
         'latent_std_sigma': 0.1,                    # latent sigma for program embedding distribution
         'bz_latent_std_mu': 0.0,                        # bz mu for behavior embedding distribution
@@ -34,15 +34,15 @@ config = {
             'use_teacher_enforcing': True,          # teacher enforcing while SL training
             'freeze_params': False                  # freeze decoder params if set True
         },
-        'use_linear': True,
+        'use_linear': False,
         'num_rnn_encoder_units': 256,
         'num_rnn_decoder_units': 256,
         'use_transformer_encoder': False,
         'use_transformer_decoder': False,
         'use_transformer_encoder_behavior': True,   # use transformer for behavior encoding instead of RNN
         'use_transformer_decoder_behavior': True,   # use transformer for behavior encoding instead of RNN
-        'transformer_layers': 2,                    # number of transformer layers for behavior encoder
-        'transformer_heads': 2,                     # number of attention heads for behavior encoder
+        'transformer_layers': 4,                    # number of transformer layers for behavior encoder
+        'transformer_heads': 4,                     # number of attention heads for behavior encoder
         'transformer_decoder_layers': 4,
         'transformer_decoder_heads': 4,
         'transformer': {                            # transformer unit setting
@@ -52,7 +52,7 @@ config = {
             'n_layers': 3,
             'n_head': 4,
             'd_inner': 512,                         # inner unit size for ffn
-            'dropout': 0.1,
+            'dropout': 0,
             'method': 'Autobot',                    # 'Autobot' or 'MeanPooling'
         },
         'behavior_encoder':{
@@ -369,7 +369,7 @@ config = {
         'enabled_losses': {
             'z_rec': True,
             'b_z_rec': True,
-            'contrastive_loss': ['clip', 'mse'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
+            'contrastive_loss': ['cosine', 'mse'],      # 'contrastive', 'clip', 'mse', 'l2', 'cosine', 'none'
             'latent': 'separate',                  # 'combined', 'separate', 'none'   
             'z_condition': True,
             'b_z_condition': True,
