@@ -240,6 +240,11 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
         self.num_layers = kwargs['net']['transformer_layers']
         self.num_heads = kwargs['net']['transformer_heads']
         self.causal_attn = kwargs.get('causal_attention', True)
+        self.max_demo_length = kwargs['max_demo_length']
+
+        # positional embedding
+        self.pos_encoder = nn.Parameter(torch.zeros(1, 20*self.max_demo_length, unit_size))
+        nn.init.normal_(self.pos_encoder, std=0.02)
         
         # end-of-sentence
         self.eos_token = nn.Parameter(torch.zeros(1, 1, unit_size))
@@ -275,7 +280,7 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
 
         self.POMDP = kwargs['POMDP']
 
-    def forward(self, s_h, a_h, s_h_len, a_h_len):
+    def forward(self, s_h, a_h, s_h_len, a_h_len, return_seq=False):
         """
         Encode a sequence of actions using a causal transformer with EOS token.
         
@@ -375,6 +380,8 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
                 padding_mask[b, :L] = False  # not padding
 
             # Apply layer norm
+            seq_len = transformer_input.size(1)
+            transformer_input = transformer_input + self.pos_encoder[:, :seq_len, :]
             transformer_input = self.pre_transformer_ln(transformer_input)
 
             # Generate causal mask if needed
@@ -406,6 +413,8 @@ class ActionBehaviorEncoderTransformer(ActionBehaviorEncoder):
             if self._use_linear:
                 final_hidden = self.proj(final_hidden)
 
+            if return_seq:
+                return final_hidden, transformer_output, padding_mask  
             return final_hidden  # shape (B, hidden_size or unit_size)
 
         else:
@@ -1023,6 +1032,7 @@ class DecoderTransformer(NNBase):
         # Transformer layers configuration
         self.num_layers = kwargs.get('net', {}).get('transformer_decoder_layers', 6)
         self.num_heads = kwargs.get('net', {}).get('transformer_decoder_heads', 8)
+        self.use_behavior_memory = kwargs['net'].get('use_behavior_memory', True)
         
         # Create TransformerDecoder layer
         decoder_layer = nn.TransformerDecoderLayer(
@@ -1106,7 +1116,7 @@ class DecoderTransformer(NNBase):
         mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
         return mask
 
-    def _forward_one_pass(self, current_tokens, context, transformer_outputs, step_idx, causal_mask):
+    def _forward_one_pass(self, current_tokens, context, transformer_outputs, step_idx, causal_mask, behavior_memory=None, behavior_padding_mask=None):
         """
         Process a single decoding step using the transformer decoder
         
@@ -1123,7 +1133,21 @@ class DecoderTransformer(NNBase):
             transformer_outputs: Updated transformer memory
             eop_output_logits: End-of-program logits (if two_head=True)
         """
-        batch_size = current_tokens.shape[0]
+        if step_idx == 0:
+            if self.use_behavior_memory and behavior_memory is not None:
+                lat_token = context.unsqueeze(1)              # [B, 1, d]
+                memory    = torch.cat([lat_token, behavior_memory], dim=1)
+                mem_key_padding_mask = torch.cat(
+                    [torch.zeros(B, 1, dtype=torch.bool, device=device),  # never mask LAT
+                    behavior_padding_mask], dim=1)
+            else:
+                memory = context.unsqueeze(1)               # legacy path
+                mem_key_padding_mask = None
+            self._cached_memory = (memory, mem_key_padding_mask)
+
+        memory, mem_key_padding_mask = self._cached_memory   # <-- keep!
+
+        
         device = current_tokens.device
         
         # Embed current tokens and add positional encoding
@@ -1148,8 +1172,7 @@ class DecoderTransformer(NNBase):
         if causal_mask is None and decoder_input.size(1) > 1:
             causal_mask = self.generate_square_subsequent_mask(decoder_input.size(1), device)
             
-        # Memory is the context (latent representation) expanded to match sequence length
-        memory = context.unsqueeze(1)  # [batch_size, 1, unit_size]
+
         
         # Run transformer decoder
         # For first step, there's no self-attention mask
@@ -1160,9 +1183,12 @@ class DecoderTransformer(NNBase):
         # )
         transformer_out = checkpoint(
             self.transformer_decoder,
-            decoder_input,  # Target sequence (tokens so far)
-            memory,         # Memory from encoder (latent embedding)
-            causal_mask     # Causal mask for self-attention
+            decoder_input,               # tgt
+            memory,                      # memory
+            causal_mask,                 # tgt_mask
+            None,                        # memory_mask
+            None,                        # tgt_key_padding_mask
+            mem_key_padding_mask         # memory_key_padding_mask
         )
         
         # Apply final layer norm
@@ -1257,7 +1283,8 @@ class DecoderTransformer(NNBase):
         return eop_preds, eop_output_logits, syntax_mask
 
     def forward(self, gt_programs, embeddings, teacher_enforcing=True, action=None, output_mask_all=None,
-                eop_action=None, deterministic=False, evaluate=False, max_program_len=float('inf')):
+                eop_action=None, deterministic=False, evaluate=False, max_program_len=float('inf'), behavior_memory=None,
+                behavior_padding_mask=None, ):
         if self.setup == 'supervised':
             assert deterministic == True
         batch_size, device = embeddings.shape[0], embeddings.device
@@ -1678,7 +1705,8 @@ class VAE(torch.nn.Module):
             raise NotImplementedError()
         
         pre_tanh_z = z
-        b_z_mu, b_z = self._sample_latent_bz(self.behavior_encoder(s_h, a_h, s_h_len, a_h_len)) #pretanh behavior embedding
+        emb, beh_mem, beh_mask = self.behavior_encoder(s_h, a_h, s_h_len, a_h_len, return_seq = True)
+        b_z_mu, b_z = self._sample_latent_bz(emb) #pretanh behavior embedding
         pre_tanh_b_z = b_z
 
         if self._tanh_after_sample:
@@ -1697,7 +1725,7 @@ class VAE(torch.nn.Module):
             # Use the scalar to scale the behavior embedding
             b_z_scalar = self.scalar(b_z)
             b_z = b_z * b_z_scalar
-        b_z_outputs = self.decoder(programs, b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
+        b_z_outputs = self.decoder(programs, b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic, behavior_memory=beh_mem, behavior_padding_mask=beh_mask)
          
         # b_z_outputs = self.decoder(programs, b_z, teacher_enforcing=teacher_enforcing, deterministic=deterministic)
 
