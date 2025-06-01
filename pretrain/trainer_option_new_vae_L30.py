@@ -396,6 +396,9 @@ if __name__ == "__main__":
     from cfg_option_new_vae import config
     wandb_session_name = input("Please enter the wandb session name: ")
     wandb.init(project="DRLGS_latent", name=wandb_session_name, config=config)
+    pwd = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(pwd, 'cfg_option_new_vae.py')
+    wandb.save(config_path)
 
     #torch.set_num_threads(2)
     torch.set_num_threads(1)

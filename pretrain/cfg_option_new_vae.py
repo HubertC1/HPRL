@@ -34,7 +34,7 @@ config = {
             'use_teacher_enforcing': True,          # teacher enforcing while SL training
             'freeze_params': False                  # freeze decoder params if set True
         },
-        'use_linear': False,
+        'use_linear': True,
         'num_rnn_encoder_units': 256,
         'num_rnn_decoder_units': 256,
         'use_transformer_encoder': False,
